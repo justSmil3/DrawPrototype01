@@ -1,0 +1,59 @@
+// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel CSMain
+#pragma kernel ClearTexture
+#include "UnityCG.cginc"
+
+// Create a RenderTexture with enableRandomWrite flag and set it
+// with cs.SetTexture
+RWTexture2D<float4> Result;
+Texture2D<float> depth;
+RWStructuredBuffer<float3> _point;
+int mouseX;
+int mouseY;
+int radius;
+int checkDist;
+
+
+float GetColor()
+{
+    float color = 0;
+    for (int i = 0; i < pow(checkDist, 2); i++)
+    {
+        int x = i % checkDist - checkDist / 2 + mouseX;
+        int y = i / checkDist - checkDist / 2 + mouseY;
+
+        // distance check if 2 are in that radius maybe
+        if (Result[float2(x, y)].x > color)
+            color = Result[float2(x, y)].x;
+    }
+    return color;
+}
+
+[numthreads(8,8,1)]
+void CSMain (uint3 id : SV_DispatchThreadID)
+{
+    // TODO: insert actual code here!
+    int mouseDiffX = mouseX - id.x;
+    int mouseDiffY = mouseY - id.y;
+    mouseDiffX = abs(mouseDiffX);
+    mouseDiffY = abs(mouseDiffY);
+    
+    if (mouseDiffX <= radius && mouseDiffY <= radius)
+    {
+        float color = GetColor();
+        if(color > 0)
+            _point[0] = float3(id.x, id.y, DECODE_EYEDEPTH(color));
+        else
+            _point[0] = 0;
+        
+        if (mouseDiffX <= radius && mouseDiffY <= radius)
+            Result[id.xy] = color;
+    }
+}
+
+[numthreads(8,8,1)]
+void ClearTexture(uint3 id : SV_DispatchThreadID)
+{
+    float2 coordinates = float2(mouseX - id.x, mouseY - id.y);
+    Result[id.xy] = depth[coordinates.xy];
+}
