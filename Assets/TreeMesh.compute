@@ -1,0 +1,233 @@
+// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel CSMain
+
+// Create a RenderTexture with enableRandomWrite flag and set it
+// with cs.SetTexture
+RWStructuredBuffer<float3> vertecies;
+RWStructuredBuffer<int> triangles;
+StructuredBuffer<float3> positions;
+StructuredBuffer<float> vigors;
+int numOfPositions;
+int numOfPositionsMax;
+float vertecieDivider; 
+float widthMult;
+float heightMult;
+float3 crossVec;
+int numVerts;
+
+int width;
+int height;
+
+
+struct P
+{
+    float3 x;
+    float3 y;
+    float3 z;
+    float3 w;
+};
+
+static const float PI = 3.14159265f;
+
+bool IsZeroFloat3(float3 value)
+{
+    return (value.x == 0 && value.y == 0 && value.z == 0);
+}
+
+float3 GetPoint(float3 p0, float3 p1, float3 p2, float3 p3, float t, float a = 1.0f)
+{
+    t = clamp(t, 0, 1);
+    a = clamp(a, 0, 1);
+
+    float3 result = (-1.0f * a * t + 2.0f * a * t * t - a * t * t * t) * p0
+                   + (1.0f + (a - 3.0f) * t * t + (2.0f - a) * t * t * t) * p1
+                   + (a * t + (3.0f - 2.0f * a) * t * t + (a - 2.0f) * t * t * t) * p2
+                   + (-1.0f * a * t * t + a * t * t * t) * p3;
+
+    return result;
+}
+
+float3 GetDerivative(float3 p0, float3 p1, float3 p2, float3 p3, float t, float a = 1.0f)
+{
+    t = clamp(t, 0, 1);
+    a = clamp(a, 0, 1);
+
+    float3 result = (-1.0f * a + 4.0f * a * t - 3.0f *  a * t * t) * p0
+                   + (2.0f * (a - 3.0f) * t + 3.0f * (2.0f - a) * t * t) * p1
+                   + (a + 2.0f * (3.0f - 2.0f * a) * t + 3.0f * (a - 2.0f) * t * t) * p2
+                   + (-2.0f * a * t + 3.0f * a * t * t) * p3;
+
+    return normalize(result);
+}
+
+float4 HamiltonProduct(float4 q0, float4 q1)
+{
+    float x = q0.x * q1.x - q0.y * q1.y - q0.z * q1.z - q0.w * q1.w;
+    float y = q0.x * q1.y + q0.y * q1.x + q0.z * q1.w - q0.w * q1.z;
+    float z = q0.x * q1.z - q0.y * q1.w + q0.z * q1.x + q0.w * q1.y;
+    float w = q0.x * q1.w + q0.y * q1.z - q0.z * q1.y + q0.w * q1.x;
+    return float4(x, y, z, w);
+}
+
+float4 qmul(float4 q1, float4 q2)
+{
+    return float4(
+        q2.xyz * q1.w + q1.xyz * q2.w + cross(q1.xyz, q2.xyz),
+        q1.w * q2.w - dot(q1.xyz, q2.xyz)
+        );
+}
+
+void GenerateMeshSegmnt(float radius1,
+    float radius2,
+    float3 p0,
+    float3 p1,
+    float3 p2,
+    float3 p3,
+    int i,
+    int insertIdx)
+{
+    float t = (int)(i * widthMult);
+    float interpolationFactor = t * heightMult;
+    float rt = i;
+    while (rt >= width)
+        rt -= width;
+    float3 dir = GetDerivative(p0, p1, p2, p3, interpolationFactor);
+    float3 w = cross(crossVec, dir);
+    float radius = lerp(radius1, radius2, interpolationFactor);
+    w = normalize(w) * radius;
+    float3 centerPoint = GetPoint(p0, p1, p2, p3, interpolationFactor);
+
+    float angle = rt * widthMult * 360;
+    angle = angle * PI / 180.0f;
+    float sn = sin(angle * 0.5);
+    float cs = cos(angle * 0.5);
+    float4 rot = float4(dir * sn, cs);
+    float4 rinv = rot * float4(-1, -1, -1, -1);
+
+    w = qmul(rinv, qmul(rot, float4(w, 0))).xyz;
+    
+
+    /*float4 P = float4(0, w.x, w.y, w.z);
+    float4 R = float4(dir * sn, cs);
+    float4 RI = float4(R.x, -R.y, -R.z, -R.w);
+
+    float4 HRP = HamiltonProduct(R, P);
+    w = HamiltonProduct(HRP, RI).yzw;*/
+
+    vertecies[insertIdx] = centerPoint + w;
+    if (insertIdx < 0) {
+        float4 Q1 = float4(1, 5, 3, 2);
+        float4 Q2 = float4(3, 1, 8, -6);
+        float4 Q3 = qmul(Q1, Q2);
+        vertecies[insertIdx] = float3(angle, Q3.y, Q3.z);
+    }
+}
+
+P GetPoints(int pointIdx)
+{
+    float3 p1 = positions[pointIdx];
+    float3 p2 = positions[pointIdx + 1];
+    float3 p0;
+    if (pointIdx == 0 || IsZeroFloat3(positions[max(0, pointIdx - 1)]))
+    {
+        p0 = p1 + p1 - p2;
+    }
+    else
+    {
+        p0 = positions[pointIdx - 1];
+    }
+    float3 p3;
+    //if (pointIdx + 2 >= numOfPositions)
+    if(IsZeroFloat3(positions[pointIdx + 2]))
+    {
+        p3 = p2 + p2 - p1;
+    }
+    else
+    {
+        p3 = positions[pointIdx + 2];
+    }
+
+    P points;
+    points.x = p0;
+    points.y = p1;
+    points.z = p2;
+    points.w = p3;
+    return points;
+}
+
+int RecalculatePointIdx(int idx)
+{
+    int tmpV = idx;
+    int i = 0;
+    while (i <= tmpV) 
+    {
+        if (IsZeroFloat3(positions[i + 1]))
+        {
+            if (tmpV < numOfPositionsMax - 2)
+                tmpV += 2;
+        }
+        i++;
+    }
+    return tmpV;
+
+    //int result = idx;
+    //for (int i = 1; i <= idx; i++)
+    //{
+    //    if (IsZeroFloat3(positions[i]))
+    //    {
+    //        result += 1;
+    //    }
+    //}
+    //return result;
+}
+
+void GenerateTriangles(int idx)
+{
+    int startVertIdx = (idx - width) * 6;
+    int vertCountBelow = (int)(idx * widthMult) * width;
+
+    int ul = idx;
+    int ur = ((idx + 1) % width) + vertCountBelow;
+    int ll = idx - width;
+    int lr = ((ll + 1) % width) + vertCountBelow - width;
+
+    triangles[startVertIdx] = ur;
+    triangles[startVertIdx + 1] = ul;
+    triangles[startVertIdx + 2] = ll;
+    triangles[startVertIdx + 3] = ur;
+    triangles[startVertIdx + 4] = ll;
+    triangles[startVertIdx + 5] = lr;
+}
+
+
+[numthreads(32,1,1)]
+void CSMain(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= numVerts) return;
+    int pointIdx = (int)(id.x * vertecieDivider);
+    int vertexIdx = id.x - pointIdx * width * height;
+
+    int tmp = pointIdx;
+
+    pointIdx = RecalculatePointIdx(pointIdx);
+
+    // declare points;
+    P points = GetPoints(pointIdx);
+
+    float radius1 = .2 * vigors[pointIdx];
+    float radius2 = .2 * vigors[pointIdx + 1];
+
+    GenerateMeshSegmnt(radius1, radius2, points.x, points.y, points.z, points.w, vertexIdx, id.x);
+
+    int vertsBefore = 0;
+    if (IsZeroFloat3(positions[max(1, pointIdx - 1)]))
+    {
+        vertsBefore = id.x;
+    }
+
+    if (id.x < width + vertsBefore)
+        return;
+    GenerateTriangles(id.x);
+    //vertecies[id.x] = float3(id.x, triangles[id.x * 6 + 1], triangles[id.x * 6 + 2]);
+}
+

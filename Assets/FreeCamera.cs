@@ -38,8 +38,8 @@ public class FreeCamera : MonoBehaviour
         }
         else if (Input.GetMouseButton(2))
         {
-            inputHorizontal = Input.GetAxis(kMouseX) * m_LookSpeedMouse;
-            inputYAxis = Input.GetAxis(kMouseY) * m_LookSpeedMouse;
+            inputHorizontal = -Input.GetAxis(kMouseX) * m_LookSpeedMouse;
+            inputYAxis = -Input.GetAxis(kMouseY) * m_LookSpeedMouse;
         }
         //float inputChangeSpeed = Input.GetAxis(kSpeedAxis);
         //if (inputChangeSpeed != 0.0f)

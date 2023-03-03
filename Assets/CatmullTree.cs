@@ -37,13 +37,6 @@ public class CatmullTree : MonoBehaviour
         SetupTree();
     }
 
-    private void Update()
-    {
-        if (testPoints.Count < 4) return;
-        SetNumberOfPoints();
-        IterateOverObjects();
-    }
-
     private void SetupTree()
     {
         tree = new SplineNode(Vector3.zero);
@@ -92,20 +85,31 @@ public class CatmullTree : MonoBehaviour
         }
     }
 
-    public void AddPoint(Vector3 position)
+    public SplineNode AddPoint(Vector3 position)
     {
         SplineNode prev;
         if (!TryGetClosestPoint(position, out prev))
-            return;
-        SplineNode newNode = new SplineNode(position);
-        prev.SetNext(newNode);
+            return null;
+        return AddPoint(position, prev);
+    }
+
+    public SplineNode AddPoint(Vector3 pos, SplineNode node)
+    {
+        SplineNode newNode = new SplineNode(pos);
+        node.SetNext(newNode);
         lastAddedNode = newNode;
+        return newNode;
     }
 
     public void MoveLastPoint(Vector3 pos)
     {
         if (lastAddedNode == null) return;
         lastAddedNode.point = pos;
+    }
+
+    public void ResetLastPoint()
+    {
+        lastAddedNode = null;
     }
 
     private void GetVertexPositions(Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3)
@@ -119,7 +123,6 @@ public class CatmullTree : MonoBehaviour
     public bool TryGetClosestPoint(Vector3 point, out SplineNode closestPoint)
     {
         GetSmallestDistance(point, out closestPoint);
-        Debug.DrawRay(closestPoint.point, point - closestPoint.point, Color.red, 20);
         return (closestPoint != null);
     }
 

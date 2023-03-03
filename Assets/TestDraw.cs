@@ -5,9 +5,11 @@ using System;
 public class TestDraw : MonoBehaviour
 {
     public ComputeShader shader;
+    public TreeMesh tmpMeshScript;
     RenderTexture textureBuffer;
     [Range(0, 1)]
     public float thrashhold = 0.85f;
+    public float dotChangeThrashhold = 0.05f;
 
     int drawKernel;
     int clearKernel;
@@ -24,11 +26,13 @@ public class TestDraw : MonoBehaviour
     private Camera cam;
 
     private Vector3 prevPointDir = Vector3.zero;
+    private Vector3 prevAddedPoint = Vector3.zero;
+    private float prevDirDot = 1;
     private Vector3 prevPointpos = Vector3.zero;
     private Vector3 lasteddidPointPos = Vector3.zero;
 
     private float mindistBetweenPoints = 0.1f;
-    private float maxDistBetweenPoints = 1.0f;
+    public float maxDistBetweenPoints = 1.0f;
 
     private bool bSkipFirst = true;
     private Ray initialMouseRay;
@@ -93,6 +97,9 @@ public class TestDraw : MonoBehaviour
             shader.SetBuffer(drawKernel, "_point", point);
             int mousePosX = Screen.width - (int)Input.mousePosition.x;
             int mousePosY = Screen.height - (int)Input.mousePosition.y;
+            // Vector3 mp = cam.WorldToScreenPoint(Vector3.up);
+            // shader.SetInt("mouseX", (int)mp.x);
+            // shader.SetInt("mouseY", (int)mp.y);
             shader.SetInt("mouseX", mousePosX);
             shader.SetInt("mouseY", mousePosY);
             shader.SetInt("radius", radius);
@@ -106,7 +113,8 @@ public class TestDraw : MonoBehaviour
         }
         if (Input.GetMouseButtonUp(0))
         {
-            prevPointpos = prevPointDir = Vector3.zero;
+            prevPointpos = prevPointDir = prevAddedPoint = Vector3.zero;
+            // tmpCatmullTree.ResetLastPoint();
         }
     }
 
@@ -131,12 +139,14 @@ public class TestDraw : MonoBehaviour
     
     private void TryAddPoint()
     {
-        Vector3 pos;
+        Vector3 pos, conPos;
+        SplineNode conNode;
         bool add = prevPointDir.Equals(Vector3.zero);
-        if (!ExtractPoint(out pos))
+        if (!ExtractPoint(out pos, out conPos, out conNode))
             return;
-        if (Vector3.Distance(pos, prevPointpos) < mindistBetweenPoints)
+        if (Vector3.Distance(pos, prevAddedPoint) < mindistBetweenPoints)
             return;
+        SplineNode newConNode = null;
         if (add)
         {
             // this is temporary and will be replaced with the distance from the insertion point
@@ -146,27 +156,65 @@ public class TestDraw : MonoBehaviour
             lasteddidPointPos = pos;
 
             points.Add(pos);
-            tmpCatmullTree.AddPoint(pos);
+            newConNode = tmpCatmullTree.AddPoint(conPos, conNode);
+            Debug.Log(conPos.x + ":" + conPos.y + ":" + conPos.z + ":|:" + newConNode.point.x + ":" + newConNode.point.y + ":" + newConNode.point.z);
             //tmpCatmullTree.testPoints.Add(pos);
         }
         else
         {
+            // in here check for three conditions to add a point: angle to last point, direction 
+            // change and distance.
             float dot = Vector3.Dot(prevPointDir.normalized, (pos - prevPointpos).normalized);
-            if (dot < thrashhold)
+            float dot2 = Vector3.Dot(prevAddedPoint.normalized, (pos - prevAddedPoint).normalized);
+            // direction to last point
+            if (dot < thrashhold && dot != 0)
+            {
                 add = true;
+            }
+            // distance
             else if (Vector3.Distance(pos, lasteddidPointPos) > maxDistBetweenPoints)
+            {
                 add = true;
+            }
+            // change in direction
+            else
+            {
+                if (dot2 < prevDirDot)
+                {
+                    prevDirDot = dot2;
+                }
+                else if (dot2 - prevDirDot > dotChangeThrashhold)
+                {
+                    add = true;
+                }
+            }
         }
         if (add)
         {
+            // reset all that needs resetting;
+            prevDirDot = 1;
+
+            // TODO currently not working
             points[points.Count - 1] = pos;
-            tmpCatmullTree.MoveLastPoint(pos);
+            if(newConNode == null)
+                tmpCatmullTree.MoveLastPoint(pos);
+
             //tmpCatmullTree.testPoints[tmpCatmullTree.testPoints.Count - 1] = pos;
+            //points.Add(conPos);
             points.Add(pos);
-            tmpCatmullTree.AddPoint(pos);
+            //SplineNode tmp = tmpCatmullTree.AddPoint(conPos);
+            
+            if(newConNode == null)
+                tmpCatmullTree.AddPoint(pos);
+            else
+                tmpCatmullTree.AddPoint(pos, newConNode);
+
+            prevAddedPoint = pos;
             //tmpCatmullTree.testPoints.Add(pos);
             prevPointDir = (pos - prevPointpos).normalized;
             lasteddidPointPos = pos;
+            //tmpMeshScript.GenerateMeshSpline();
+            tmpMeshScript.GenerateMeshSplineByShader();
         }
         else
         {
@@ -177,40 +225,94 @@ public class TestDraw : MonoBehaviour
         prevPointpos = pos;
     }
 
-    private bool ExtractPoint(out Vector3 _point)
+    private bool ExtractPoint(out Vector3 _point, out Vector3 connectionJoint, out SplineNode connectionNode)
     {
-        Vector3 camPos = cam.transform.position;
         _point = Vector3.zero;
+        connectionJoint = Vector3.zero;
+        connectionNode = null;
+
         Vector3[] pArray = new Vector3[1];
         point.GetData(pArray);
         Vector3 p = pArray[0];
         if (p.z == 0) return false;
         Ray mouseRay = cam.ScreenPointToRay(Input.mousePosition);
-        Vector3 dir = mouseRay.direction;
-        Plane camPlane = new Plane(cam.transform.forward, 0);
+        Vector3 mousePoint = mouseRay.origin + mouseRay.direction.normalized * p.z;
+        SplineNode closestPoint;
+        if (!tmpCatmullTree.TryGetClosestPoint(mousePoint, out closestPoint))
+            return false;
 
-        Vector3 startPoint = initialMouseRay.origin + initialMouseRay.direction * p.z;
-        Vector3 planePoint = camPlane.ClosestPointOnPlane(startPoint);
-        float distPlane2Plane = Vector3.Distance(startPoint, planePoint);
-        float dist1 = Vector3.Distance(camPos, startPoint);
-        float dist2 = Vector3.Distance(camPos, planePoint);
-        distPlane2Plane = dist1 < dist2 ? distPlane2Plane : -distPlane2Plane;
-        Plane plane = new Plane(cam.transform.forward, distPlane2Plane);
-        float dist2Point;
-        plane.Raycast(mouseRay, out dist2Point);
-        Vector3 vector2plane = mouseRay.direction * dist2Point;
-        _point = mouseRay.origin + vector2plane;
+        connectionNode = closestPoint;
+
+        
+
+        Plane camPlane, pointPlane;
+        camPlane = new Plane(cam.transform.forward, Vector3.zero);
+        Vector3 camPlanePointFromClosestPoint =
+            camPlane.ClosestPointOnPlane(connectionNode.point);
+        Vector3 newInNormal = camPlanePointFromClosestPoint - connectionNode.point;
+
+        // this check exists to mitigate points beeing generated at the tip of the camera
+        if (newInNormal.magnitude < 0.00001f)
+            pointPlane = camPlane;
+        else
+            pointPlane = new Plane(newInNormal.normalized, newInNormal.magnitude);
+
+        float distMouse2Plane;
+        pointPlane.Raycast(mouseRay, out distMouse2Plane);
+
+        _point = mouseRay.origin + mouseRay.direction * distMouse2Plane;
+
+
+
+        float dist1, dist2;
+        SplineNode p2;
+        Vector3 p3;
+        p2 = closestPoint.GetNextNode();
+        if (p2 == null)
+        {
+            // I need to figure out a way to still add to the last node 
+            return true;
+        }
+        if (p2.GetNumberOfConnections() > 0)
+        {
+            p3 = p2.GetNextNode().point;
+        }
+        else
+        {
+            p3 = p2.point + p2.point - connectionNode.point;
+        }
+        dist1 = Vector3.Distance(closestPoint.point, mousePoint);
+        dist2 = Vector3.Distance(p2.point, mousePoint);
+        float t = dist1 / (dist1 + dist2);
+        connectionJoint = CatmullRom.GetPoint(connectionNode.point, p2.point, p3, t);
         return true;
+        
+        // DEPRICATED
+        //// TMP Debug Messaage Debug.Log(Vector3.Distance(cam.transform.position, Vector3.up) + " : " + p.z);
+        //Vector3 dir = mouseRay.direction;
+        //Plane camPlane = new Plane(cam.transform.forward, 0);
+
+        //Vector3 startPoint = initialMouseRay.origin + initialMouseRay.direction * p.z;
 
 
-        //Vector3 rotatedOrigine = camPlane.ClosestPointOnPlane(camPos + dir);
-        //Debug.DrawRay(camPos + dir, rotatedOrigine - (camPos + dir)); 
-        //float d = Vector3.Distance(rotatedOrigine, camPos) - 1;
-        //Plane plane = new Plane(cam.transform.forward, d);
-        //Vector3 vector2plane = plane.ClosestPointOnPlane(camPos + dir) - (camPos + dir);
-        //float mult = p.z / (-1 + vector2plane.magnitude);
-        //dir *= mult;
-        //_point = mouseRay.origin - dir;
+        //// TODO this is not at all performant, because i call the same function later to get to 
+        //// the same node. figure out a way to fix it 
+        //SplineNode tmpNode;
+        //tmpCatmullTree.TryGetClosestPoint(startPoint, out tmpNode);
+        //float tmpDist = Vector3.Distance(tmpNode.point, mouseRay.origin);
+        //startPoint = tmpNode.point;
+
+
+        //Vector3 planePoint = camPlane.ClosestPointOnPlane(startPoint);
+        //float distPlane2Plane = Vector3.Distance(startPoint, planePoint);
+        //float dist1 = Vector3.Distance(camPos, startPoint);
+        //float dist2 = Vector3.Distance(camPos, planePoint);
+        //distPlane2Plane = dist1 < dist2 ? distPlane2Plane : -distPlane2Plane;
+        //Plane plane = new Plane(cam.transform.forward, distPlane2Plane);
+        //float dist2Point;
+        //plane.Raycast(mouseRay, out dist2Point);
+        //Vector3 vector2plane = mouseRay.direction * dist2Point;
+        //_point = mouseRay.origin + vector2plane;
         //return true;
     }
 

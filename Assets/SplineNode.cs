@@ -41,8 +41,25 @@ public class SplineNode
         Debug.Log(prefix + perfix + point + postFix);
         for (int i = 0; i < next.Count; i++)
         {
+            Debug.DrawRay(point, next[i].point - point, Color.red, 50);
             next[i].LogAll(prefix, idx + 1, postFix + " : " + i.ToString());
         }
+    }
+
+    public List<Vector3> ConvertBranch2VectorList()
+    {
+        List<Vector3> result = new List<Vector3>();
+
+        result.Add(point);
+
+        for(int i = 0; i < next.Count; i++)
+        {
+            result.AddRange(next[i].ConvertBranch2VectorList());
+        }
+        if (next.Count == 0)
+            result.Add(Vector3.zero);
+
+        return result;
     }
 
     public SplineNode[] GetTree(List<SplineNode> nodes = null)
@@ -67,6 +84,16 @@ public class SplineNode
     public int GetBranchSize(int idx = 0)
     {
         return next.Count <= idx ? 1 : 1 + next[idx].GetBranchSize();
+    }
+
+    public int GetTreeSize()
+    {
+        int result = 1;
+        for (int i = 0; i < next.Count; i++)
+        {
+            result += next[i].GetTreeSize();
+        }
+        return result;
     }
 
 
@@ -169,5 +196,28 @@ public class SplineNode
         return currentindex;
     }
 
+    public List<float> GetVigorMultArray(int idx = 0, float maxBranchSize = 0, float startMult = 1)
+    {
+        if(idx == 0)
+        {
+            maxBranchSize = GetBranchSize()-1;
+        }
+        List<float> result = new List<float>();
+        float vigor = ((float)GetBranchSize() - 1) / maxBranchSize * startMult;
+        result.Add(vigor);
+        if(next.Count > 0)
+        {
+            result.AddRange(next[0].GetVigorMultArray(idx+1, maxBranchSize, startMult));
+        }
+        else
+        {
+            result.Add(-1f); 
+        }
+        for(int i = 1; i < next.Count; i++)
+        {
+            result.AddRange(next[i].GetVigorMultArray(0, 0, vigor));
+        }
+        return result;
+    }
 
 }
