@@ -6,6 +6,11 @@ public class TestDraw : MonoBehaviour
 {
     public ComputeShader shader;
     public TreeMesh tmpMeshScript;
+
+    // TMP Cam stuff
+    private List<RenderTexture> allTextures = new List<RenderTexture>();
+    private List<Camera> allCameras = new List<Camera>();
+
     RenderTexture textureBuffer;
     [Range(0, 1)]
     public float thrashhold = 0.85f;
@@ -13,7 +18,7 @@ public class TestDraw : MonoBehaviour
 
     int drawKernel;
     int clearKernel;
-
+    
     public CatmullTree tmpCatmullTree;
 
     private Mesh _mesh;
@@ -44,19 +49,20 @@ public class TestDraw : MonoBehaviour
     private void Awake()
     {
         cam = Camera.main;
-        cam.depthTextureMode = DepthTextureMode.Depth;
     }
     public void Start()
     {
         point = new ComputeBuffer(1, sizeof(float) * 3);
-        textureBuffer = new RenderTexture(Screen.width, Screen.height, 4);
+        int screenWidth = (int)(Screen.width * cam.rect.width);
+        int screenHeight = (int)(Screen.height * cam.rect.height);
+        textureBuffer = new RenderTexture(screenWidth, screenHeight, 4);
         textureBuffer.enableRandomWrite = true;
-        gameObject.GetComponent<Renderer>().material.mainTexture = textureBuffer;
+        // cam.transform.GetChild(0).gameObject.GetComponent<Renderer>().material.mainTexture = textureBuffer;
         drawKernel = shader.FindKernel("CSMain");
         clearKernel = shader.FindKernel("ClearTexture");
-        _mesh = gameObject.GetComponent<MeshFilter>().mesh;
-        Vector3 screenMin = Camera.main.WorldToScreenPoint(_mesh.bounds.min);
-        Vector3 screnMax = Camera.main.WorldToScreenPoint(_mesh.bounds.max);
+        _mesh = cam.transform.GetChild(0).gameObject.GetComponent<MeshFilter>().mesh;
+        Vector3 screenMin = cam.WorldToScreenPoint(_mesh.bounds.min);
+        Vector3 screnMax = cam.WorldToScreenPoint(_mesh.bounds.max);
         screenScaleX = screnMax.x - screenMin.x;
         screenScaleY = screnMax.y - screenMin.y;
     }
@@ -67,10 +73,17 @@ public class TestDraw : MonoBehaviour
         {
             StartCoroutine(WaitThenDo());
         }
-        else if(!Input.GetMouseButton(0))
+        else if (!Input.GetMouseButton(0))
         {
             resetTexture();
         }
+    }
+
+    public void SetActiveCamera(Camera activeCam, RenderTexture _tex)
+    {
+        cam = activeCam;
+        textureBuffer = _tex;
+        
     }
 
     private IEnumerator WaitThenDo()
@@ -82,21 +95,24 @@ public class TestDraw : MonoBehaviour
 
     private void Update()
     {
-        float dist2Cam = Vector3.Distance(Camera.main.transform.position, transform.position);
-        float planeHeight = 2.0f * Mathf.Tan(0.5f * Camera.main.fieldOfView * Mathf.Deg2Rad) * dist2Cam;
-        planeHeight /= 10;
-        float planeWidth = planeHeight * Camera.main.aspect;
-        transform.localScale = new Vector3(planeWidth, transform.localScale.y, planeHeight);
+        //float dist2Cam = Vector3.Distance(cam.transform.position, transform.position);
+        //float planeHeight = 2.0f * Mathf.Tan(0.5f * cam.fieldOfView * Mathf.Deg2Rad) * dist2Cam;
+        //planeHeight /= 10;
+        //float planeWidth = planeHeight * cam.aspect;
+        //transform.localScale = new Vector3(planeWidth, transform.localScale.y, planeHeight);
         if (Input.GetMouseButtonDown(0))
         {
             initialMouseRay = cam.ScreenPointToRay(Input.mousePosition);
         }
         if (Input.GetMouseButton(0))
         {
+            int screenWidth = (int)(Screen.width * cam.rect.width);
+            int screenHeight = (int)(Screen.height * cam.rect.height);
+
             shader.SetTexture(drawKernel, "Result", textureBuffer);
             shader.SetBuffer(drawKernel, "_point", point);
-            int mousePosX = Screen.width - (int)Input.mousePosition.x;
-            int mousePosY = Screen.height - (int)Input.mousePosition.y;
+            int mousePosX = (int)((Screen.width - (int)Input.mousePosition.x) % screenWidth);
+            int mousePosY = (int)((Screen.height - (int)Input.mousePosition.y) % screenHeight);
             // Vector3 mp = cam.WorldToScreenPoint(Vector3.up);
             // shader.SetInt("mouseX", (int)mp.x);
             // shader.SetInt("mouseY", (int)mp.y);
@@ -104,7 +120,7 @@ public class TestDraw : MonoBehaviour
             shader.SetInt("mouseY", mousePosY);
             shader.SetInt("radius", radius);
             shader.SetInt("checkDist", extendetRadius);
-            shader.Dispatch(drawKernel, Screen.width / 8, Screen.height / 8, 1);
+            shader.Dispatch(drawKernel, screenWidth / 8, screenHeight / 8, 1);
             TryAddPoint();
         }
         if (Input.GetKey(KeyCode.LeftControl))
@@ -129,14 +145,33 @@ public class TestDraw : MonoBehaviour
 
     public void resetTexture()
     {
-        cam = Camera.main;
-        shader.SetTexture(clearKernel, "Result", textureBuffer);
-        shader.SetTextureFromGlobal(clearKernel, "depth", "_CameraDepthTexture");
-        shader.SetInt("mouseX", Screen.width);
-        shader.SetInt("mouseY", Screen.height);
-        shader.Dispatch(clearKernel, Screen.width / 8, Screen.height / 8, 1);
+        for (int i = 0; i < allTextures.Count; i++)
+        {
+            Camera currentCam = allCameras[i];
+            RenderTexture currentTexture = allTextures[i];
+
+            currentCam.Render();
+            shader.SetTexture(clearKernel, "Result", currentTexture);
+            shader.SetTextureFromGlobal(clearKernel, "depth", "_LastCameraDepthTexture");
+            int currentWidth = (int)(Screen.width * currentCam.rect.width);
+            int currentHeight =  (int)(Screen.height * currentCam.rect.height);
+            shader.SetInt("mouseX", currentWidth);
+            shader.SetInt("mouseY", currentHeight);
+            shader.Dispatch(clearKernel, currentWidth / 8, currentHeight / 8, 1);
+        }
+        //shader.SetTexture(clearKernel, "Result", textureBuffer);
+        //shader.SetTextureFromGlobal(clearKernel, "depth", "_CameraDepthTexture");
+        //shader.SetInt("mouseX", Screen.width);
+        //shader.SetInt("mouseY", Screen.height);
+        //shader.Dispatch(clearKernel, Screen.width / 8, Screen.height / 8, 1);
     }
-    
+
+    public void RegisterCameras(List<RenderTexture> textures, List<Camera> cams)
+    {
+        allTextures.AddRange(textures);
+        allCameras.AddRange(cams);
+    }
+
     private void TryAddPoint()
     {
         Vector3 pos, conPos;
@@ -157,7 +192,6 @@ public class TestDraw : MonoBehaviour
 
             points.Add(pos);
             newConNode = tmpCatmullTree.AddPoint(conPos, conNode);
-            Debug.Log(conPos.x + ":" + conPos.y + ":" + conPos.z + ":|:" + newConNode.point.x + ":" + newConNode.point.y + ":" + newConNode.point.z);
             //tmpCatmullTree.testPoints.Add(pos);
         }
         else

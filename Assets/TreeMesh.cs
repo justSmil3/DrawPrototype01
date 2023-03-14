@@ -15,7 +15,7 @@ public class TreeMesh : MonoBehaviour
 
     private float resolution;
     private Vector3[] Tvertecies;
-    private Transform camTransform;
+    public Transform camTransform;
 
     private int height = 2;
 
@@ -49,7 +49,12 @@ public class TreeMesh : MonoBehaviour
         mesh = new Mesh();
         GetComponent<MeshFilter>().mesh = mesh;
         resolution = Mathf.Sqrt(verteciemult);
-        camTransform = Camera.main.transform;
+        //camTransform = Camera.main.transform;
+    }
+
+    public void ChangeCam(Camera cam)
+    {
+        camTransform = cam.transform;
     }
 
     bool once = true;

@@ -17,6 +17,7 @@ public class CatmullTree : MonoBehaviour
     public SplineNode tree;
     public SplineNode lastAddedNode;
     LineRenderer debugLine;
+    public TreeMesh tmpConnectionMesh;
 
     //debug code 
     private void OnDrawGizmos()
@@ -37,8 +38,23 @@ public class CatmullTree : MonoBehaviour
         SetupTree();
     }
 
-    private void SetupTree()
+    //private void Update()
+    //{
+    //    if (Input.GetKeyDown(KeyCode.R))
+    //    {
+    //        SetupTree();
+    //    }
+    //}
+
+    public void SetupTree()
     {
+        bool reset = false;
+        if (tree != null)
+        {
+            tree.DeleteSplineTree();
+            reset = true;
+        }
+
         tree = new SplineNode(Vector3.zero);
         SplineNode s2 = new SplineNode(Vector3.up * 1);
         tree.SetNext(s2);
@@ -50,6 +66,11 @@ public class CatmullTree : MonoBehaviour
         s4.SetNext(s5);
         SplineNode s6 = new SplineNode(Vector3.up * 5);
         s5.SetNext(s6);
+
+        if (reset)
+        {
+            tmpConnectionMesh.GenerateMeshSplineByShader();
+        }
     }
 
 
