@@ -46,6 +46,15 @@ public class SplineNode
         }
     }
 
+    public void DrawTree()
+    {
+        for (int i = 0; i < next.Count; i++)
+        {
+            Debug.DrawRay(point, next[i].point - point, Color.red, 50);
+            next[i].DrawTree();
+        }
+    }
+
     public List<Vector3> ConvertBranch2VectorList()
     {
         List<Vector3> result = new List<Vector3>();
@@ -58,6 +67,25 @@ public class SplineNode
         }
         if (next.Count == 0)
             result.Add(Vector3.zero);
+
+        return result;
+    }
+
+    public List<Vector3> ConvertBranch2VectorList(bool testDebug)
+    {
+        List<Vector3> result = new List<Vector3>();
+
+        if(next.Count == 0)
+        {
+            result.Add(point);
+            result.Add(Vector3.zero);
+        }
+
+        for (int i = 0; i < next.Count; i++)
+        {
+            result.Add(point);
+            result.AddRange(next[i].ConvertBranch2VectorList(true));
+        }
 
         return result;
     }
@@ -86,9 +114,10 @@ public class SplineNode
         return next.Count <= idx ? 1 : 1 + next[idx].GetBranchSize();
     }
 
-    public int GetTreeSize()
+    public int GetTreeSize(bool addEnds = false)
     {
         int result = 1;
+        if (next.Count == 0 && addEnds) result++;
         for (int i = 0; i < next.Count; i++)
         {
             result += next[i].GetTreeSize();
@@ -215,6 +244,33 @@ public class SplineNode
         }
         for(int i = 1; i < next.Count; i++)
         {
+            result.AddRange(next[i].GetVigorMultArray(0, 0, vigor));
+        }
+        return result;
+    }
+
+
+    public List<float> GetVigorMultArrayTmp(int idx = 0, float maxBranchSize = 0, float startMult = 1)
+    {
+        if (idx == 0)
+        {
+            maxBranchSize = GetBranchSize() - 1;
+        }
+        List<float> result = new List<float>();
+        float vigor = ((float)GetBranchSize() - 1) / maxBranchSize * startMult;
+        if (next.Count > 0)
+        {
+            result.Add(vigor);
+            result.AddRange(next[0].GetVigorMultArray(idx + 1, maxBranchSize, startMult));
+        }
+        else
+        {
+            result.Add(vigor);
+            result.Add(-1f);
+        }
+        for (int i = 1; i < next.Count; i++)
+        {
+            result.Add(vigor);
             result.AddRange(next[i].GetVigorMultArray(0, 0, vigor));
         }
         return result;

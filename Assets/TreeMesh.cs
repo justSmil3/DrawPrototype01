@@ -59,12 +59,22 @@ public class TreeMesh : MonoBehaviour
 
     bool once = true;
     bool bUpdateMeshGen = true;
-    
+
     private void Update()
     {
         bUpdateMeshGen = Input.GetMouseButton(0);
         if (Input.GetKeyDown(KeyCode.G))
             GenerateMeshSplineByShader();
+        if (Input.GetKeyDown(KeyCode.X))
+        {
+            int width = (int)(ra * verteciemult);
+            float widthMult = 1f / (float)width;
+            float heightMult = 1f / (float)height;
+            for (int i = 0; i < width * height; i++)
+            {
+                // Debug.Log("t: " + i + " | interpolation: " + Mathf.Floor(i * widthMult) * heightMult);
+            }
+        }
     }
 
     private void Start()
@@ -95,7 +105,7 @@ public class TreeMesh : MonoBehaviour
         float vertecieDivider = 1f / (float)(width * height);
 
         int posCount = tree.tree.GetTreeSize();
-        List<Vector3> posList = tree.tree.ConvertBranch2VectorList();
+        List<Vector3> posList = tree.tree.ConvertBranch2VectorList(true);
         int numOfEnds = 0;
         for (int i = 1; i < posList.Count; i++)
         {
@@ -115,7 +125,7 @@ public class TreeMesh : MonoBehaviour
 
         Vector3[] vertBufferList = new Vector3[numOfVerts];
         int[] triBufferList = new int[numOfTris];
-        float[] tmpDebugFloatList = tree.tree.GetVigorMultArray().ToArray();
+        float[] tmpDebugFloatList = tree.tree.GetVigorMultArrayTmp().ToArray();
 
 
         vertexBuffer.SetData(vertBufferList);
@@ -128,24 +138,31 @@ public class TreeMesh : MonoBehaviour
         vertexShader.SetBuffer(0, "positions", positionBuffer);
         vertexShader.SetBuffer(0, "vigors", vigorBuffer);
         vertexShader.SetVector("crossVec", camTransform.forward);
-        vertexShader.SetFloat("vertecieDivider", vertecieDivider);
-        vertexShader.SetFloat("widthMult", widthMult);
-        vertexShader.SetFloat("heightMult", heightMult);
-        vertexShader.SetInt("numOfPositions", posList.Count - numOfEnds);
+        //vertexShader.SetFloat("vertecieDivider", vertecieDivider);
+        //vertexShader.SetFloat("widthMult", widthMult);
+        vertexShader.SetFloat("widthDivider", widthMult);
+        //vertexShader.SetFloat("heightMult", heightMult);
+        vertexShader.SetFloat("heightDivider", heightMult);
+        //vertexShader.SetInt("numOfPositions", posList.Count - numOfEnds);
         vertexShader.SetInt("numOfPositionsMax", posList.Count);
         vertexShader.SetInt("width", width);
         vertexShader.SetInt("height", height);
         vertexShader.SetInt("numVerts", numOfVerts);
 
-        vertexShader.Dispatch(0, numOfVerts / 32 + 32, 1, 1);
+        //vertexShader.Dispatch(0, numOfVerts / 32 + 32, 1, 1);
+        vertexShader.Dispatch(0, posCount * height / 32 + 32, 1, 1);
         Vector3[] resultingVerts = new Vector3[numOfVerts];
         Vector3[] resultingPos = new Vector3[posList.Count];
         int[] resultingTris = new int[numOfTris];
         vertexBuffer.GetData(resultingVerts);
         triangleBuffer.GetData(resultingTris);
-        Tvertecies = resultingVerts; // TODO remove, this is a debug statement
+        //for (int i = 0; i < resultingVerts.Length; i++)
+        //{
+        //    Debug.Log(i + ": " + resultingVerts[i]);
+        //}
+        Tvertecies = resultingVerts;
         mesh.vertices = resultingVerts;
-        mesh.triangles = resultingTris;
+        mesh.triangles = resultingTris; 
     }
 
 
@@ -178,7 +195,7 @@ public class TreeMesh : MonoBehaviour
             bool first = GenerateSplinePoints(prev, current, nextNode, out points, i);
             float radius1 = vigor * ra;
             float radius2 = newVigor * ra;
-            
+
             GenerateMeshSegment(radius1,
                                 radius2,
                                 points[0],
@@ -198,7 +215,7 @@ public class TreeMesh : MonoBehaviour
     {
         bool result = true;
         points = new Vector3[4];
-        if(prev == null)
+        if (prev == null)
         {
             result = false;
             points[0] = current.point + (current.point - next.point);
@@ -207,7 +224,7 @@ public class TreeMesh : MonoBehaviour
         {
             points[0] = prev.point;
         }
-        if(next.GetNumberOfConnections() <= 0)
+        if (next.GetNumberOfConnections() <= 0)
         {
             points[3] = next.point + (next.point - current.point);
         }
@@ -330,7 +347,7 @@ public class TreeMesh : MonoBehaviour
             W = W.normalized * radius;
 
             int[] tmpTriangles;
-            Vector3[] tmpVertecies = 
+            Vector3[] tmpVertecies =
                 GenerateMeshRing(centerPoint, dir, W, width, vertecies.Count + mesh.vertexCount, out tmpTriangles, first);
             Vector2[] tmpUvs = GenerateUvRing(width, uvHeight);
             uvHeight++;
@@ -342,7 +359,7 @@ public class TreeMesh : MonoBehaviour
 
         List<Vector3> newVertecies = new List<Vector3>();
         List<int> newTriangles = new List<int>();
-        List<Vector2> newUvs= new List<Vector2>();
+        List<Vector2> newUvs = new List<Vector2>();
 
         newVertecies.AddRange(mesh.vertices);
         newTriangles.AddRange(tmpMeshTri);
@@ -359,27 +376,27 @@ public class TreeMesh : MonoBehaviour
                                      int row)
     {
         Vector2[] res = new Vector2[num];
-        for(int i = 0; i < num; i++)
+        for (int i = 0; i < num; i++)
         {
             res[i] = new Vector2(i, row);
         }
         return res;
     }
 
-        private Vector3[] GenerateMeshRing(Vector3 centerPoint,
-                                       Vector3 dir,
-                                       Vector3 W,
-                                       int num,
-                                       int start,
-                                       out int[] triangles,
-                                       bool first = false)
+    private Vector3[] GenerateMeshRing(Vector3 centerPoint,
+                                   Vector3 dir,
+                                   Vector3 W,
+                                   int num,
+                                   int start,
+                                   out int[] triangles,
+                                   bool first = false)
     {
         // bool first = start < num;
         triangles = !first ? new int[0] : new int[num * 6];
         Vector3[] result = new Vector3[num];
 
         int _start = start;
-        for(int i = 0; i < num; i++)
+        for (int i = 0; i < num; i++)
         {
             float rt = i / (float)num;
 
@@ -455,7 +472,7 @@ public class TreeMesh : MonoBehaviour
     {
 
         for (int i = 0; i < v.Length; i++)
-        {            
+        {
             float t = (int)(i / width);
             float rt = i % width;
             Vector3 centerPoint = CatmullRom.GetPoint(p0, p1, p2, p3, t / (float)(height));
@@ -467,7 +484,7 @@ public class TreeMesh : MonoBehaviour
             Vector3 W = Vector3.Cross(camTransform.forward, dir);
             float radius = Mathf.Lerp(radius1, radius2, t / (height - 1));
             W = W.normalized * radius;
-            
+
             Vector3 W2 = Quaternion.AngleAxis(200, dir.normalized) * W;
             W = Quaternion.AngleAxis(360 * (rt / ((float)width)), dir.normalized) * W;
 

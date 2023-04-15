@@ -77,6 +77,9 @@ float4 qmul(float4 q1, float4 q2)
         );
 }
 
+
+
+
 void GenerateMeshSegmnt(float radius1,
     float radius2,
     float3 p0,
@@ -91,11 +94,11 @@ void GenerateMeshSegmnt(float radius1,
     float rt = i;
     while (rt >= width)
         rt -= width;
-    float3 dir = GetDerivative(p0, p1, p2, p3, interpolationFactor);
+    float3 dir = GetDerivative(p0, p1, p2, p3, interpolationFactor, .5);
     float3 w = cross(crossVec, dir);
     float radius = lerp(radius1, radius2, interpolationFactor);
     w = normalize(w) * radius;
-    float3 centerPoint = GetPoint(p0, p1, p2, p3, interpolationFactor);
+    float3 centerPoint = GetPoint(p0, p1, p2, p3, interpolationFactor, .5);
 
     float angle = rt * widthMult * 360;
     angle = angle * PI / 180.0f;
@@ -181,9 +184,9 @@ int RecalculatePointIdx(int idx)
     //return result;
 }
 
-void GenerateTriangles(int idx)
+void GenerateTriangles(int idx, int LeftOutRows)
 {
-    int startVertIdx = (idx - width) * 6;
+    int startVertIdx = (idx - width * LeftOutRows) * 6;
     int vertCountBelow = (int)(idx * widthMult) * width;
 
     int ul = idx;
@@ -207,7 +210,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     int pointIdx = (int)(id.x * vertecieDivider);
     int vertexIdx = id.x - pointIdx * width * height;
 
-    int tmp = pointIdx;
+    int tmpPointIdx = pointIdx;
 
     pointIdx = RecalculatePointIdx(pointIdx);
 
@@ -220,14 +223,23 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     GenerateMeshSegmnt(radius1, radius2, points.x, points.y, points.z, points.w, vertexIdx, id.x);
 
     int vertsBefore = 0;
+    
+    // the error is somewhere here, but I will try to archive something more like the second approach
+    // work on that idear tomorrow
+    
     if (IsZeroFloat3(positions[max(1, pointIdx - 1)]))
     {
         vertsBefore = id.x;
+        // return;
     }
 
     if (id.x < width + vertsBefore)
         return;
-    GenerateTriangles(id.x);
+    
+    int leftOutRows = 1;
+    leftOutRows += (int) ((pointIdx - tmpPointIdx) * .5f);
+    
+    GenerateTriangles(id.x, leftOutRows);
     //vertecies[id.x] = float3(id.x, triangles[id.x * 6 + 1], triangles[id.x * 6 + 2]);
 }
 

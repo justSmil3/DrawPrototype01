@@ -38,13 +38,14 @@ public class CatmullTree : MonoBehaviour
         SetupTree();
     }
 
-    //private void Update()
-    //{
-    //    if (Input.GetKeyDown(KeyCode.R))
-    //    {
-    //        SetupTree();
-    //    }
-    //}
+    private void Update()
+    {
+
+        if (Input.GetKeyDown(KeyCode.K))
+        {
+            tree.DrawTree();
+        }
+    }
 
     public void SetupTree()
     {
@@ -147,17 +148,19 @@ public class CatmullTree : MonoBehaviour
         return (closestPoint != null);
     }
 
-
+    // TODO connection error is in here, after wc testing i dont find it anymore
     private float GetSmallestDistance(Vector3 pos, out SplineNode result, SplineNode node = null, SplineNode prev = null)
     {
         if (node == null)
             node = tree;
-
+        
         float dist = GetDistToPoint(pos, node, prev);
         result = node;
 
         for(int i = 0; i < node.GetNumberOfConnections(); i++)
         {
+            if (Vector3.Dot(pos - node.point, node.GetNextNode(0).point - node.point) < 0)
+                return float.PositiveInfinity;
             SplineNode tmpRes;
             float tmpDist = GetSmallestDistance(pos, out tmpRes, node.GetNextNode(i), node);
 
@@ -174,20 +177,20 @@ public class CatmullTree : MonoBehaviour
     private float GetDistToPoint(Vector3 pos, SplineNode node, SplineNode prev = null)
     {
         Vector3 dir = Vector3.zero;
-        if (node.GetNumberOfConnections() <= 0)
-        {
-            if(prev == null)
-                return float.PositiveInfinity;
-            dir = (node.point - prev.point).normalized;
-        }
-        else
-        {
-            dir = (node.GetNextNode().point - node.point).normalized;
-        }
+        //if (node.GetNumberOfConnections() <= 0)
+        //{
+        //    if(prev == null)
+        //        return float.PositiveInfinity;
+        //    dir = (node.point - prev.point).normalized;
+        //}
+        //else
+        //{
+        //    dir = (node.GetNextNode().point - node.point).normalized;
+        //}
         Vector3 dir2 = pos - node.point;
         bool bDir = IsDirectionCorrect(dir, dir2.normalized);
         float result = bDir ? dir2.magnitude : float.PositiveInfinity;
-        return result;
+        return dir2.magnitude;
     }
 
     private bool IsDirectionCorrect(Vector3 dir1, Vector3 dir2)

@@ -192,6 +192,7 @@ public class TestDraw : MonoBehaviour
 
             points.Add(pos);
             newConNode = tmpCatmullTree.AddPoint(conPos, conNode);
+            Debug.Log(conPos + " : " + conNode);
             //tmpCatmullTree.testPoints.Add(pos);
         }
         else
@@ -236,7 +237,6 @@ public class TestDraw : MonoBehaviour
             //tmpCatmullTree.testPoints[tmpCatmullTree.testPoints.Count - 1] = pos;
             //points.Add(conPos);
             points.Add(pos);
-            //SplineNode tmp = tmpCatmullTree.AddPoint(conPos);
             
             if(newConNode == null)
                 tmpCatmullTree.AddPoint(pos);
@@ -274,7 +274,7 @@ public class TestDraw : MonoBehaviour
         SplineNode closestPoint;
         if (!tmpCatmullTree.TryGetClosestPoint(mousePoint, out closestPoint))
             return false;
-
+        //Debug.DrawRay(Vector3.zero, closestPoint.point, Color.green, 10);
         connectionNode = closestPoint;
 
         
@@ -315,10 +315,13 @@ public class TestDraw : MonoBehaviour
         {
             p3 = p2.point + p2.point - connectionNode.point;
         }
-        dist1 = Vector3.Distance(closestPoint.point, mousePoint);
-        dist2 = Vector3.Distance(p2.point, mousePoint);
+
+        dist1 = Vector3.Distance(closestPoint.point, _point);
+        dist2 = Vector3.Distance(p2.point, _point);
         float t = dist1 / (dist1 + dist2);
-        connectionJoint = CatmullRom.GetPoint(connectionNode.point, p2.point, p3, t);
+        Debug.DrawRay(cam.transform.position, p2.point  - cam.transform.position, Color.green, 10);
+        Debug.DrawRay(cam.transform.position, p3  - cam.transform.position, Color.green, 10);
+        connectionJoint = CatmullRom.GetPoint(connectionNode.point, p2.point, p3, t, 0.5f);
         return true;
         
         // DEPRICATED

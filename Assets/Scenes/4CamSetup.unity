@@ -2025,6 +2025,14 @@ PrefabInstance:
       propertyPath: camTransform
       value: 
       objectReference: {fileID: 69278243}
+    - target: {fileID: 3218400881783432219, guid: 456a796dbb260c746be55ced8bae5ab5, type: 3}
+      propertyPath: verteciemult
+      value: 60
+      objectReference: {fileID: 0}
+    - target: {fileID: 3218400881783432219, guid: 456a796dbb260c746be55ced8bae5ab5, type: 3}
+      propertyPath: vertexShader
+      value: 
+      objectReference: {fileID: 7200000, guid: 57b960771efac174a9f3037d429ab94c, type: 3}
     m_RemovedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 456a796dbb260c746be55ced8bae5ab5, type: 3}
 --- !u!114 &760073492 stripped
