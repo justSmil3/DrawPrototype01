@@ -27,7 +27,7 @@ public class CatmullTree : MonoBehaviour
         SplineNode[] wholeTree = tree.GetTree();
         for(int i = 0; i < wholeTree.Length; i++)
         {
-            Gizmos.DrawSphere(wholeTree[i].point, .03f);
+            //Gizmos.DrawSphere(wholeTree[i].point, .03f);
 
         }
     }
@@ -127,6 +127,11 @@ public class CatmullTree : MonoBehaviour
     {
         if (lastAddedNode == null) return;
         lastAddedNode.point = pos;
+    }
+
+    public SplineNode GetLastPoint()
+    {
+        return lastAddedNode;
     }
 
     public void ResetLastPoint()

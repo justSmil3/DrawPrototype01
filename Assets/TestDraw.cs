@@ -176,7 +176,7 @@ public class TestDraw : MonoBehaviour
     {
         Vector3 pos, conPos;
         SplineNode conNode;
-        bool add = prevPointDir.Equals(Vector3.zero);
+        bool add = Input.GetMouseButtonDown(0);
         if (!ExtractPoint(out pos, out conPos, out conNode))
             return;
         if (Vector3.Distance(pos, prevAddedPoint) < mindistBetweenPoints)
@@ -237,9 +237,9 @@ public class TestDraw : MonoBehaviour
             //tmpCatmullTree.testPoints[tmpCatmullTree.testPoints.Count - 1] = pos;
             //points.Add(conPos);
             points.Add(pos);
-            
+
             if(newConNode == null)
-                tmpCatmullTree.AddPoint(pos);
+                tmpCatmullTree.AddPoint(pos, tmpCatmullTree.GetLastPoint());
             else
                 tmpCatmullTree.AddPoint(pos, newConNode);
 
@@ -276,7 +276,6 @@ public class TestDraw : MonoBehaviour
             return false;
         //Debug.DrawRay(Vector3.zero, closestPoint.point, Color.green, 10);
         connectionNode = closestPoint;
-
         
 
         Plane camPlane, pointPlane;

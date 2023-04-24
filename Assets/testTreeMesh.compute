@@ -9,11 +9,13 @@ RWStructuredBuffer<float3> vertecies;
 RWStructuredBuffer<int> triangles;
 StructuredBuffer<float3> positions;
 StructuredBuffer<float> vigors;
+RWStructuredBuffer<float> debug;
 
 int numVerts;
 int numOfPositionsMax;
 int height;
 int width;
+int numEnds;
 
 float heightDivider;
 float widthDivider;
@@ -24,7 +26,7 @@ static const float PI = 3.14159265f;
 
 bool IsZeroFloat3(float3 value)
 {
-    return (value.x == 0 && value.y == 0 && value.z == 0);
+    return (value.x == -1000 && value.y == -1000 && value.z == -1000);
 }
 
 float4 qmul(float4 q1, float4 q2)
@@ -35,21 +37,23 @@ float4 qmul(float4 q1, float4 q2)
         );
 }
 
-int RecalculatePointIdx(int idx)
+int2 RecalculatePointIdx(int idx)
 {
     int i = 1;
+    int leftOut = 0;
     while (i <= idx)
     {
         if (IsZeroFloat3(positions[i + 1]))
         {
             if (idx < numOfPositionsMax - 2)
             {
-                idx += 2;
+                idx +=2;
+                leftOut++;
             }
         }
         i++;
     }
-    return idx;
+    return int2(idx, leftOut);
 }
 
 P CalculatePoitns(int pointIdx)
@@ -127,18 +131,17 @@ int GetNumOfLeftOutRows(int pointIdx)
     return leftOutRows;
 }
 
-void AddTriangles(int idx)
+void AddTriangles(int vIdx, int leftOut)
 {
-    int vIdx = (idx) * width;
-    int insertIdx = (idx - 1) * width * 6;
-    int vertCountBelow = vIdx;
+    int insertIdx = (vIdx - width) * 6 +(leftOut * width * 3);
+    int vertCountBelow = vIdx + leftOut;
     
     for (int i = 0; i < width; i++)
     {
-        int ul = vIdx;
+        int ul = vIdx + leftOut;
         int ur = ((vIdx + 1) % width) + vertCountBelow;
-        int ll = vIdx - width;
-        int lr = ((ll + 1) % width) + vertCountBelow - width;
+        int ll = vIdx - width + leftOut;
+        int lr = ((vIdx - width + 1) % width) + vertCountBelow - width;
         vIdx += 1;
         
         triangles[insertIdx] = ur;
@@ -147,30 +150,55 @@ void AddTriangles(int idx)
         triangles[insertIdx + 3] = ur;
         triangles[insertIdx + 4] = ll;
         triangles[insertIdx + 5] = lr;
-        
+
         insertIdx += 6;
     }
 }
 
+void AddTopTriangles(int vIdx, int leftOut) 
+{
+    int insertIdx = vIdx * 6 + (leftOut * width * 3);
+    int vertCountBelow = vIdx;
+
+    for (int i = 0; i < width; i++)
+    {
+        int u = vertCountBelow  + width + leftOut;
+        int ll = vIdx + leftOut;
+        int lr = ((vIdx + 1) % width) + vertCountBelow + leftOut;
+        vIdx += 1;
+
+         triangles[insertIdx] = u;
+         triangles[insertIdx + 1] = lr;
+         triangles[insertIdx + 2] = ll;
+
+        insertIdx += 3;
+    }
+}
 
 [numthreads(32, 1, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID)
 {
-    
-    if (id.x * width >= numVerts)
-    return;
-    
+
+    if (id.x * width + numEnds >= numVerts)
+        return;
+
     int pointIdx;
     int heightIdx;
-    
-    pointIdx = (int) (id.x * heightDivider);
-    pointIdx = RecalculatePointIdx(pointIdx);
+
+    pointIdx = (int)(id.x * heightDivider);
     heightIdx = id.x % height;
+    int leftOut;
+    int2 tmp = RecalculatePointIdx(pointIdx);
+    pointIdx = tmp[0];
+    leftOut = tmp[1];
+    int vertexInsertIdx = id.x * width +leftOut;
+    int triInsertIdx = (id.x) * width;
+
 
     float radius1 = .2 * vigors[pointIdx];
     float radius2 = .2 * vigors[pointIdx + 1];
     P points = CalculatePoitns(pointIdx);
-    GenerateMeshRing(points, heightIdx, radius1, radius2, id.x * width);
+    GenerateMeshRing(points, heightIdx, radius1, radius2, vertexInsertIdx);
     
     if(heightIdx == 0)
     {
@@ -180,6 +208,13 @@ void CSMain(uint3 id : SV_DispatchThreadID)
             return;
     }
     
-    AddTriangles(id.x);
+    AddTriangles(triInsertIdx, leftOut);
+    debug[pointIdx] = 5;
+
+    if (IsZeroFloat3(positions[pointIdx + 2]) && height == heightIdx + 1)
+    {
+        vertecies[vertexInsertIdx + width] = positions[pointIdx + 1];
+        AddTopTriangles(triInsertIdx, leftOut);
+    }
 }
 

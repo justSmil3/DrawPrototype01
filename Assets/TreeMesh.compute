@@ -31,7 +31,7 @@ static const float PI = 3.14159265f;
 
 bool IsZeroFloat3(float3 value)
 {
-    return (value.x == 0 && value.y == 0 && value.z == 0);
+    return (value.x == -1000 && value.y == -1000 && value.z == -1000);
 }
 
 float3 GetPoint(float3 p0, float3 p1, float3 p2, float3 p3, float t, float a = 1.0f)
@@ -144,6 +144,7 @@ P GetPoints(int pointIdx)
     if(IsZeroFloat3(positions[pointIdx + 2]))
     {
         p3 = p2 + p2 - p1;
+        p3 = float3(0, 6, 0);
     }
     else
     {
@@ -167,7 +168,7 @@ int RecalculatePointIdx(int idx)
         if (IsZeroFloat3(positions[i + 1]))
         {
             if (tmpV < numOfPositionsMax - 2)
-                tmpV += 2;
+                tmpV++;
         }
         i++;
     }

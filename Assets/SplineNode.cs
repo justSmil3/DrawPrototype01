@@ -1,5 +1,10 @@
 using System.Collections.Generic;
 using UnityEngine;
+
+public static class GlobalVar
+{
+    public static Vector3 NULLVEC = new Vector3(-1000, -1000, -1000);
+}
 public class SplineNode
 {
     private List<SplineNode> next;
@@ -46,11 +51,14 @@ public class SplineNode
         }
     }
 
-    public void DrawTree()
+    public void DrawTree(float duration = - 1)
     {
         for (int i = 0; i < next.Count; i++)
         {
-            Debug.DrawRay(point, next[i].point - point, Color.red, 50);
+            if (duration > 0)
+                Debug.DrawRay(point, next[i].point - point, Color.red, duration);
+            else
+                Debug.DrawRay(point, next[i].point - point, Color.red);
             next[i].DrawTree();
         }
     }
@@ -66,7 +74,7 @@ public class SplineNode
             result.AddRange(next[i].ConvertBranch2VectorList());
         }
         if (next.Count == 0)
-            result.Add(Vector3.zero);
+            result.Add(GlobalVar.NULLVEC);
 
         return result;
     }
@@ -78,7 +86,7 @@ public class SplineNode
         if(next.Count == 0)
         {
             result.Add(point);
-            result.Add(Vector3.zero);
+            result.Add(GlobalVar.NULLVEC);
         }
 
         for (int i = 0; i < next.Count; i++)
@@ -261,7 +269,7 @@ public class SplineNode
         if (next.Count > 0)
         {
             result.Add(vigor);
-            result.AddRange(next[0].GetVigorMultArray(idx + 1, maxBranchSize, startMult));
+            result.AddRange(next[0].GetVigorMultArrayTmp(idx + 1, maxBranchSize, startMult));
         }
         else
         {
@@ -271,7 +279,7 @@ public class SplineNode
         for (int i = 1; i < next.Count; i++)
         {
             result.Add(vigor);
-            result.AddRange(next[i].GetVigorMultArray(0, 0, vigor));
+            result.AddRange(next[i].GetVigorMultArrayTmp(0, 0, vigor));
         }
         return result;
     }

@@ -17,7 +17,8 @@ public class TreeMesh : MonoBehaviour
     private Vector3[] Tvertecies;
     public Transform camTransform;
 
-    private int height = 2;
+    public int height = 1;
+    public int width = 4;
 
     // private Vector2[] uvs;
     // private int[] triangles;
@@ -26,6 +27,8 @@ public class TreeMesh : MonoBehaviour
     private ComputeBuffer triangleBuffer;
     private ComputeBuffer positionBuffer;
     private ComputeBuffer vigorBuffer;
+
+    private ComputeBuffer DebugBuffer;
 
     private void OnDrawGizmos()
     {
@@ -65,15 +68,41 @@ public class TreeMesh : MonoBehaviour
         bUpdateMeshGen = Input.GetMouseButton(0);
         if (Input.GetKeyDown(KeyCode.G))
             GenerateMeshSplineByShader();
-        if (Input.GetKeyDown(KeyCode.X))
+
+        if (Input.GetKey(KeyCode.C))
         {
-            int width = (int)(ra * verteciemult);
-            float widthMult = 1f / (float)width;
-            float heightMult = 1f / (float)height;
-            for (int i = 0; i < width * height; i++)
+            List<Vector3> posList = tree.tree.ConvertBranch2VectorList(true);
+            for (int i = 0; i < posList.Count; i++)
             {
-                // Debug.Log("t: " + i + " | interpolation: " + Mathf.Floor(i * widthMult) * heightMult);
+                Debug.Log(i + "th position: " + posList[i]);
             }
+
+        }
+        if (Input.GetKey(KeyCode.X))
+        {
+            List<Vector3> posList = tree.tree.ConvertBranch2VectorList(true);
+            for (int i = 0; i < posList.Count - 1; i++)
+            {
+                Vector3 pos = posList[i];
+                Vector3 nextPos = posList[i + 1];
+                if (nextPos == GlobalVar.NULLVEC)
+                {
+                    continue;
+                }
+                Debug.DrawRay(pos, nextPos - pos, Color.red);
+            }
+            for (int i = 0; i < posList.Count; i++)
+            {
+                Debug.Log("pos " + i + ": " + posList[i]);
+            }
+
+            //int width = (int)(ra * verteciemult);
+            //float widthMult = 1f / (float)width;
+            //float heightMult = 1f / (float)height;
+            //for (int i = 0; i < width * height; i++)
+            //{
+            //    // Debug.Log("t: " + i + " | interpolation: " + Mathf.Floor(i * widthMult) * heightMult);
+            //}
         }
     }
 
@@ -99,23 +128,24 @@ public class TreeMesh : MonoBehaviour
 
     public void GenerateMeshSplineByShader()
     {
-        int width = (int)(ra * verteciemult);
         float widthMult = 1f / (float)width;
         float heightMult = 1f / (float)height;
         float vertecieDivider = 1f / (float)(width * height);
 
         int posCount = tree.tree.GetTreeSize();
+        float[] tmpDebugFloatList = tree.tree.GetVigorMultArrayTmp().ToArray();
         List<Vector3> posList = tree.tree.ConvertBranch2VectorList(true);
         int numOfEnds = 0;
-        for (int i = 1; i < posList.Count; i++)
+        for (int i = 0; i < posList.Count; i++)
         {
-            if (posList[i].Equals(Vector3.zero))
+            if (posList[i].Equals(GlobalVar.NULLVEC))
                 numOfEnds++;
         }
 
-        posCount -= numOfEnds;
+        //posCount -= numOfEnds;
         int numOfVerts = height * width * posCount;
-        int numOfTris = (numOfVerts - width) * 6;
+        int numOfTris = (numOfVerts - width) * 6 + numOfEnds * width * 3;
+        numOfVerts += numOfEnds;
 
 
         vertexBuffer = new ComputeBuffer(numOfVerts, sizeof(float) * 3);
@@ -123,20 +153,25 @@ public class TreeMesh : MonoBehaviour
         positionBuffer = new ComputeBuffer(posList.Count, sizeof(float) * 3);
         vigorBuffer = new ComputeBuffer(posList.Count, sizeof(float));
 
+        DebugBuffer = new ComputeBuffer(posList.Count, sizeof(float));
+
         Vector3[] vertBufferList = new Vector3[numOfVerts];
         int[] triBufferList = new int[numOfTris];
-        float[] tmpDebugFloatList = tree.tree.GetVigorMultArrayTmp().ToArray();
+
+        float[] debugBufferList = new float[posList.Count];
 
 
         vertexBuffer.SetData(vertBufferList);
         triangleBuffer.SetData(triBufferList);
         positionBuffer.SetData(posList.ToArray());
         vigorBuffer.SetData(tmpDebugFloatList);
+        DebugBuffer.SetData(debugBufferList);
 
         vertexShader.SetBuffer(0, "vertecies", vertexBuffer);
         vertexShader.SetBuffer(0, "triangles", triangleBuffer);
         vertexShader.SetBuffer(0, "positions", positionBuffer);
         vertexShader.SetBuffer(0, "vigors", vigorBuffer);
+        vertexShader.SetBuffer(0, "debug", DebugBuffer);
         vertexShader.SetVector("crossVec", camTransform.forward);
         //vertexShader.SetFloat("vertecieDivider", vertecieDivider);
         //vertexShader.SetFloat("widthMult", widthMult);
@@ -148,21 +183,26 @@ public class TreeMesh : MonoBehaviour
         vertexShader.SetInt("width", width);
         vertexShader.SetInt("height", height);
         vertexShader.SetInt("numVerts", numOfVerts);
+        vertexShader.SetInt("numEnds", numOfEnds);
 
         //vertexShader.Dispatch(0, numOfVerts / 32 + 32, 1, 1);
-        vertexShader.Dispatch(0, posCount * height / 32 + 32, 1, 1);
+        vertexShader.Dispatch(0, ((posCount * height)) / 32 + 32, 1, 1);
         Vector3[] resultingVerts = new Vector3[numOfVerts];
         Vector3[] resultingPos = new Vector3[posList.Count];
+        float[] resultingDebug = new float[posList.Count];
         int[] resultingTris = new int[numOfTris];
         vertexBuffer.GetData(resultingVerts);
         triangleBuffer.GetData(resultingTris);
-        //for (int i = 0; i < resultingVerts.Length; i++)
-        //{
-        //    Debug.Log(i + ": " + resultingVerts[i]);
-        //}
+        DebugBuffer.GetData(resultingDebug);
         Tvertecies = resultingVerts;
         mesh.vertices = resultingVerts;
-        mesh.triangles = resultingTris; 
+        mesh.triangles = resultingTris;
+
+        vertexBuffer.Dispose();
+        triangleBuffer.Dispose();
+        positionBuffer.Dispose();
+        vigorBuffer.Dispose();
+        DebugBuffer.Dispose();
     }
 
 

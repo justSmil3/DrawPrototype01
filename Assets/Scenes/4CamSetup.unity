@@ -2022,6 +2022,14 @@ PrefabInstance:
       value: 
       objectReference: {fileID: 141551471}
     - target: {fileID: 3218400881783432219, guid: 456a796dbb260c746be55ced8bae5ab5, type: 3}
+      propertyPath: width
+      value: 9
+      objectReference: {fileID: 0}
+    - target: {fileID: 3218400881783432219, guid: 456a796dbb260c746be55ced8bae5ab5, type: 3}
+      propertyPath: height
+      value: 2
+      objectReference: {fileID: 0}
+    - target: {fileID: 3218400881783432219, guid: 456a796dbb260c746be55ced8bae5ab5, type: 3}
       propertyPath: camTransform
       value: 
       objectReference: {fileID: 69278243}
