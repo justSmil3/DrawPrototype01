@@ -1,72 +1,30 @@
+#include <Catmul.compute>
+
 // Each #kernel tells which function to compile; you can have many kernels
 #pragma kernel CSMain
 
 // Create a RenderTexture with enableRandomWrite flag and set it
 // with cs.SetTexture
+static const float PI = 3.14159265f;
+
 RWStructuredBuffer<float3> vertecies;
 RWStructuredBuffer<int> triangles;
 StructuredBuffer<float3> positions;
 StructuredBuffer<float> vigors;
-int numOfPositions;
-int numOfPositionsMax;
-float vertecieDivider; 
-float widthMult;
-float heightMult;
-float3 crossVec;
-int numVerts;
+RWStructuredBuffer<float> debug;
 
-int width;
 int height;
+int width;
+int numOfPositionsMax;
 
+float heightDivider;
+float widthDivider;
 
-struct P
-{
-    float3 x;
-    float3 y;
-    float3 z;
-    float3 w;
-};
-
-static const float PI = 3.14159265f;
+float3 crossVec;
 
 bool IsZeroFloat3(float3 value)
 {
     return (value.x == -1000 && value.y == -1000 && value.z == -1000);
-}
-
-float3 GetPoint(float3 p0, float3 p1, float3 p2, float3 p3, float t, float a = 1.0f)
-{
-    t = clamp(t, 0, 1);
-    a = clamp(a, 0, 1);
-
-    float3 result = (-1.0f * a * t + 2.0f * a * t * t - a * t * t * t) * p0
-                   + (1.0f + (a - 3.0f) * t * t + (2.0f - a) * t * t * t) * p1
-                   + (a * t + (3.0f - 2.0f * a) * t * t + (a - 2.0f) * t * t * t) * p2
-                   + (-1.0f * a * t * t + a * t * t * t) * p3;
-
-    return result;
-}
-
-float3 GetDerivative(float3 p0, float3 p1, float3 p2, float3 p3, float t, float a = 1.0f)
-{
-    t = clamp(t, 0, 1);
-    a = clamp(a, 0, 1);
-
-    float3 result = (-1.0f * a + 4.0f * a * t - 3.0f *  a * t * t) * p0
-                   + (2.0f * (a - 3.0f) * t + 3.0f * (2.0f - a) * t * t) * p1
-                   + (a + 2.0f * (3.0f - 2.0f * a) * t + 3.0f * (a - 2.0f) * t * t) * p2
-                   + (-2.0f * a * t + 3.0f * a * t * t) * p3;
-
-    return normalize(result);
-}
-
-float4 HamiltonProduct(float4 q0, float4 q1)
-{
-    float x = q0.x * q1.x - q0.y * q1.y - q0.z * q1.z - q0.w * q1.w;
-    float y = q0.x * q1.y + q0.y * q1.x + q0.z * q1.w - q0.w * q1.z;
-    float z = q0.x * q1.z - q0.y * q1.w + q0.z * q1.x + q0.w * q1.y;
-    float w = q0.x * q1.w + q0.y * q1.z - q0.z * q1.y + q0.w * q1.x;
-    return float4(x, y, z, w);
 }
 
 float4 qmul(float4 q1, float4 q2)
@@ -77,56 +35,7 @@ float4 qmul(float4 q1, float4 q2)
         );
 }
 
-
-
-
-void GenerateMeshSegmnt(float radius1,
-    float radius2,
-    float3 p0,
-    float3 p1,
-    float3 p2,
-    float3 p3,
-    int i,
-    int insertIdx)
-{
-    float t = (int)(i * widthMult);
-    float interpolationFactor = t * heightMult;
-    float rt = i;
-    while (rt >= width)
-        rt -= width;
-    float3 dir = GetDerivative(p0, p1, p2, p3, interpolationFactor, .5);
-    float3 w = cross(crossVec, dir);
-    float radius = lerp(radius1, radius2, interpolationFactor);
-    w = normalize(w) * radius;
-    float3 centerPoint = GetPoint(p0, p1, p2, p3, interpolationFactor, .5);
-
-    float angle = rt * widthMult * 360;
-    angle = angle * PI / 180.0f;
-    float sn = sin(angle * 0.5);
-    float cs = cos(angle * 0.5);
-    float4 rot = float4(dir * sn, cs);
-    float4 rinv = rot * float4(-1, -1, -1, -1);
-
-    w = qmul(rinv, qmul(rot, float4(w, 0))).xyz;
-    
-
-    /*float4 P = float4(0, w.x, w.y, w.z);
-    float4 R = float4(dir * sn, cs);
-    float4 RI = float4(R.x, -R.y, -R.z, -R.w);
-
-    float4 HRP = HamiltonProduct(R, P);
-    w = HamiltonProduct(HRP, RI).yzw;*/
-
-    vertecies[insertIdx] = centerPoint + w;
-    if (insertIdx < 0) {
-        float4 Q1 = float4(1, 5, 3, 2);
-        float4 Q2 = float4(3, 1, 8, -6);
-        float4 Q3 = qmul(Q1, Q2);
-        vertecies[insertIdx] = float3(angle, Q3.y, Q3.z);
-    }
-}
-
-P GetPoints(int pointIdx)
+P CalculatePoitns(int pointIdx)
 {
     float3 p1 = positions[pointIdx];
     float3 p2 = positions[pointIdx + 1];
@@ -141,10 +50,9 @@ P GetPoints(int pointIdx)
     }
     float3 p3;
     //if (pointIdx + 2 >= numOfPositions)
-    if(IsZeroFloat3(positions[pointIdx + 2]))
+    if (IsZeroFloat3(positions[pointIdx + 2]))
     {
         p3 = p2 + p2 - p1;
-        p3 = float3(0, 6, 0);
     }
     else
     {
@@ -159,88 +67,187 @@ P GetPoints(int pointIdx)
     return points;
 }
 
-int RecalculatePointIdx(int idx)
+void GenerateMeshRing(P points, int heightIdx, float radius1, float radius2, int insertIdx)
 {
-    int tmpV = idx;
-    int i = 0;
-    while (i <= tmpV) 
+    float t = (float) heightIdx * heightDivider;
+    float3 centerPoint = GetPoint(points.x, points.y, points.z, points.w, t, .5);
+    float3 dir = GetDerivative(points.x, points.y, points.z, points.w, t, .5);
+
+    float anglee = 0;
+    float angleIncements = 360 * widthDivider;
+    
+    float3 w = cross(crossVec, dir);
+    float radius = lerp(radius1, radius2, t);
+    w = normalize(w) * radius;
+    
+    for (int i = 0; i < width; i++)
     {
-        if (IsZeroFloat3(positions[i + 1]))
-        {
-            if (tmpV < numOfPositionsMax - 2)
-                tmpV++;
-        }
-        i++;
+        float angle = anglee * PI / 180.0f;
+        float sn = sin(angle * 0.5);
+        float cs = cos(angle * 0.5);
+        float4 rot = float4(dir * sn, cs);
+        float4 rinv = rot * float4(-1, -1, -1, -1);
+
+        // w = qmul(rinv, qmul(rot, float4(w, 0))).xyz;
+        float3 wtmp = qmul(rinv, qmul(rot, float4(w, 0))).xyz;
+        //vertecies[insertIdx + i] = float3(points.y.y, points.z.y, heightIdx);
+        vertecies[insertIdx + i] = centerPoint + wtmp;
+        anglee += angleIncements;
     }
-    return tmpV;
-
-    //int result = idx;
-    //for (int i = 1; i <= idx; i++)
-    //{
-    //    if (IsZeroFloat3(positions[i]))
-    //    {
-    //        result += 1;
-    //    }
-    //}
-    //return result;
 }
 
-void GenerateTriangles(int idx, int LeftOutRows)
+bool isMeshNeeded(int pointIdx, int currentHeigt)
 {
-    int startVertIdx = (idx - width * LeftOutRows) * 6;
-    int vertCountBelow = (int)(idx * widthMult) * width;
-
-    int ul = idx;
-    int ur = ((idx + 1) % width) + vertCountBelow;
-    int ll = idx - width;
-    int lr = ((ll + 1) % width) + vertCountBelow - width;
-
-    triangles[startVertIdx] = ur;
-    triangles[startVertIdx + 1] = ul;
-    triangles[startVertIdx + 2] = ll;
-    triangles[startVertIdx + 3] = ur;
-    triangles[startVertIdx + 4] = ll;
-    triangles[startVertIdx + 5] = lr;
+    if (IsZeroFloat3(positions[pointIdx]))
+        return false;
+    if (pointIdx + 1 <= numOfPositionsMax);
+    {
+        if (IsZeroFloat3(positions[pointIdx + 1]))
+            return false;
+    }
+    if(pointIdx - 1 >= 0)
+    if(IsZeroFloat3(positions[pointIdx - 1]))
+        return false;
+    return true;
+    // the -2 at the end is related with the -3 in the check before triangles
+    // most of these checks are only nessesay cause of the placement but may can be removed later on when placement
+    // is improved
 }
 
+int2 GetAlreadyAppliedVertexNumebr(int idx, int currentHeight)
+{
+    int alreadyApplied = 0;
+    int pastEnds = 0;
+    for (int i = 0; i < idx; i++)
+    {
+        if (IsZeroFloat3(positions[i]))
+        {
+            pastEnds++;
+        }
+        for (int j = 0; j < height; j++)
+        {
+            if (isMeshNeeded(i, j))
+            {
+                alreadyApplied++;
+            }
+        }
+    }
+    for (int i = 0; i < currentHeight; i++)
+    {
+        if (isMeshNeeded(idx, i))
+        {
+            alreadyApplied++;
+        }
+    }
+    int normalAppliedVerts = alreadyApplied * width;
+    return int2(normalAppliedVerts + pastEnds, (normalAppliedVerts - width) * 6 + pastEnds * width * 3);
+}
 
-[numthreads(32,1,1)]
+void AddTriangles(int insertIdx, int vertIdx)
+{
+    int _vertIdx = vertIdx;
+    for (int i = 0; i < width - 1; i++)
+    {
+        int ul = _vertIdx;
+        int ur = _vertIdx + 1;
+        int ll = _vertIdx - width;
+        int lr = _vertIdx - width + 1;
+        _vertIdx++;
+        triangles[insertIdx] = ur;
+        triangles[insertIdx + 1] = ul;
+        triangles[insertIdx + 2] = ll;
+        triangles[insertIdx + 3] = ur;
+        triangles[insertIdx + 4] = ll;
+        triangles[insertIdx + 5] = lr;
+        
+        insertIdx += 6;
+    }
+    
+    debug[0] = vertIdx;
+    int ul = _vertIdx;
+    int ur = vertIdx;
+    int ll = _vertIdx - width;
+    int lr = vertIdx - width;
+    
+    triangles[insertIdx] = ur;
+    triangles[insertIdx + 1] = ul;
+    triangles[insertIdx + 2] = ll;
+    triangles[insertIdx + 3] = ur;
+    triangles[insertIdx + 4] = ll;
+    triangles[insertIdx + 5] = lr;
+}
+
+void AddTopTriangles(int insertIdx, int vertIdx)
+{
+    int _vertIdx = vertIdx;
+    for (int i = 0; i < width - 1; i++)
+    {
+        int u = vertIdx;
+        int ll = _vertIdx - width;
+        int lr = _vertIdx - width + 1;
+        _vertIdx++;
+        
+        triangles[insertIdx] = u;
+        triangles[insertIdx + 1] = ll;
+        triangles[insertIdx + 2] = lr;
+        insertIdx += 3;
+    }
+    int u = vertIdx;
+    int ll = _vertIdx - width;
+    int lr = vertIdx - width;
+    
+    triangles[insertIdx] = u;
+    triangles[insertIdx + 1] = lr;
+    triangles[insertIdx + 2] = ll;
+}
+
+[numthreads(32, 1, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID)
 {
-    if (id.x >= numVerts) return;
-    int pointIdx = (int)(id.x * vertecieDivider);
-    int vertexIdx = id.x - pointIdx * width * height;
-
-    int tmpPointIdx = pointIdx;
-
-    pointIdx = RecalculatePointIdx(pointIdx);
-
-    // declare points;
-    P points = GetPoints(pointIdx);
-
+    int pointIdx = floor(id.x * heightDivider);
+    if(pointIdx >= numOfPositionsMax)
+    {
+        return;
+    }
+    int currentHeight = id.x % height;
+    debug[id.x] = pointIdx;
+    if (!isMeshNeeded(pointIdx, currentHeight))
+    {
+        return;
+    }
+    
     float radius1 = .2 * vigors[pointIdx];
     float radius2 = .2 * vigors[pointIdx + 1];
-
-    GenerateMeshSegmnt(radius1, radius2, points.x, points.y, points.z, points.w, vertexIdx, id.x);
-
-    int vertsBefore = 0;
+    int2 valuesBefore = GetAlreadyAppliedVertexNumebr(pointIdx, currentHeight);
+    int verteciesBefore = valuesBefore[0];
+    int trianglesBefore = valuesBefore[1];
     
-    // the error is somewhere here, but I will try to archive something more like the second approach
-    // work on that idear tomorrow
+    P points = CalculatePoitns(pointIdx);
+    GenerateMeshRing(points, currentHeight, radius1, radius2, verteciesBefore);
     
-    if (IsZeroFloat3(positions[max(1, pointIdx - 1)]))
+    if (currentHeight == 0)
     {
-        vertsBefore = id.x;
-        // return;
+        if (pointIdx == 0)
+        {
+            return;
+        }
+        
+        else if (pointIdx - 2 >= 0)
+        {
+            if (IsZeroFloat3(positions[pointIdx - 2]))
+            {
+                return;
+            }
+        }
+        //else if (IsZeroFloat3(positions[pointIdx - 3]) && pointIdx > 1)
+        //    return;
     }
-
-    if (id.x < width + vertsBefore)
-        return;
     
-    int leftOutRows = 1;
-    leftOutRows += (int) ((pointIdx - tmpPointIdx) * .5f);
-    
-    GenerateTriangles(id.x, leftOutRows);
-    //vertecies[id.x] = float3(id.x, triangles[id.x * 6 + 1], triangles[id.x * 6 + 2]);
+    AddTriangles(trianglesBefore, verteciesBefore);
+    if (IsZeroFloat3(positions[pointIdx + 2]) && height == currentHeight + 1)
+    {
+        vertecies[verteciesBefore + width] = positions[pointIdx + 1];
+        AddTopTriangles(trianglesBefore + width * 6, verteciesBefore + width);
+    }
 }
 

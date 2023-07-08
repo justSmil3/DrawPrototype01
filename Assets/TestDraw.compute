@@ -7,7 +7,7 @@
 // with cs.SetTexture
 RWTexture2D<float4> Result;
 Texture2D<float> depth;
-RWStructuredBuffer<float3> _point;
+//RWStructuredBuffer<float3> _point;
 int mouseX;
 int mouseY;
 int radius;
@@ -41,10 +41,10 @@ void CSMain (uint3 id : SV_DispatchThreadID)
     if (mouseDiffX <= radius && mouseDiffY <= radius)
     {
         float color = GetColor();
-        if(color > 0)
-            _point[0] = float3(id.x, id.y, DECODE_EYEDEPTH(color));
-        else
-            _point[0] = 0;
+        //if(color > 0)
+        //    _point[0] = float3(id.x, id.y, DECODE_EYEDEPTH(color));
+        //else
+        //    _point[0] = 0;
         
         if (mouseDiffX <= radius && mouseDiffY <= radius)
             Result[id.xy] = color;

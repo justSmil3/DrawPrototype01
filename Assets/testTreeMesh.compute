@@ -47,7 +47,7 @@ int2 RecalculatePointIdx(int idx)
         {
             if (idx < numOfPositionsMax - 2)
             {
-                idx +=2;
+                idx += 2;
                 leftOut++;
             }
         }
@@ -189,6 +189,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     heightIdx = id.x % height;
     int leftOut;
     int2 tmp = RecalculatePointIdx(pointIdx);
+    
     pointIdx = tmp[0];
     leftOut = tmp[1];
     int vertexInsertIdx = id.x * width +leftOut;

@@ -19,6 +19,13 @@ public class CatmullTree : MonoBehaviour
     LineRenderer debugLine;
     public TreeMesh tmpConnectionMesh;
 
+    private SplineNode selectedNode;
+    private GameObject debugObject;
+    public GameObject debugObjectPrefab;
+
+    public RotateCam rotateCam;
+
+    private Stack<SplineNode> addedNodes;
     //debug code 
     private void OnDrawGizmos()
     {
@@ -36,14 +43,29 @@ public class CatmullTree : MonoBehaviour
     {
         debugLine = GetComponent<LineRenderer>();
         SetupTree();
+        selectedNode = tree;
+        debugObject = GameObject.Instantiate(debugObjectPrefab);
+        debugObject.transform.position = selectedNode.point;
+        Debug.Log(debugObject);
+        addedNodes = new Stack<SplineNode>();
     }
 
     private void Update()
     {
-
-        if (Input.GetKeyDown(KeyCode.K))
+        if(Input.GetKeyDown(KeyCode.Z) && Input.GetKey(KeyCode.LeftControl))
         {
-            tree.DrawTree();
+            UndoNodeAdd();
+        }
+        if (Input.GetKeyDown(KeyCode.F))
+        {
+            SplineNode tmp;
+            if(TryGetClosestPointToMousePos(Input.mousePosition, out tmp))
+            {
+                Debug.DrawRay(Camera.main.transform.position, tmp.point - Camera.main.transform.position, Color.red, 10);
+                rotateCam.PivotPoint = tmp.point;
+            }
+            //TryGetClosestPoint(Camera.main.ScreenToWorldPoint(Input.mousePosition), out selectedNode);
+            //debugObject.transform.position = selectedNode.point;
         }
     }
 
@@ -120,7 +142,19 @@ public class CatmullTree : MonoBehaviour
         SplineNode newNode = new SplineNode(pos);
         node.SetNext(newNode);
         lastAddedNode = newNode;
+        addedNodes.Push(newNode);
         return newNode;
+    }
+
+    public void UndoNodeAdd()
+    {
+        if(addedNodes.Count <= 0)
+        {
+            return;
+        }
+        SplineNode tmp = addedNodes.Pop();
+        tree.DeleteSplineNode(tmp);
+        tmpConnectionMesh.GenerateMeshSplineByShader();
     }
 
     public void MoveLastPoint(Vector3 pos)
@@ -147,6 +181,73 @@ public class CatmullTree : MonoBehaviour
         }
     }
 
+    public bool TryGetClosestPointToMousePos(Vector2 mousePos, 
+                                             out SplineNode closestPoint, 
+                                             bool directionBased = false, 
+                                             float radius = -1,
+                                             float dependentOnRadius = float.PositiveInfinity)
+    {
+        closestPoint = null;
+
+        Ray mouseRay = Camera.main.ScreenPointToRay(mousePos);
+        SplineNode closestNode;
+        float closestDist = GetSplineNodeClosestToMouse(tree, mouseRay, out closestNode, directionBased, radius);
+
+        if(closestNode != null)
+        {
+            if(closestDist > dependentOnRadius)
+            {
+                return false;
+            }
+            closestPoint = closestNode;
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// this function is basically just a recursive helper function for TryGetClosestPointToMousePos
+    /// </summary>
+    /// <param name="node"></param>
+    /// <param name="mouseRay"></param>
+    /// <param name="result"></param>
+    /// <param name="directionBased"></param>
+    /// <returns></returns>
+    private float GetSplineNodeClosestToMouse(SplineNode node, 
+                                              Ray mouseRay, 
+                                              out SplineNode result, 
+                                              bool directionBased = false,
+                                              float radius = -1)
+    {
+        // TODO impliment a direction check 
+        result = node;
+        float distToCam = Vector3.Distance(node.point, Camera.main.transform.position);
+        Vector3 pointByNode = mouseRay.GetPoint(distToCam);
+        float distToNode = Vector3.Distance(node.point, pointByNode);
+        for(int i = 0; i < node.GetNumberOfConnections(); i++)
+        {
+            SplineNode nextNodeResult;
+            float dist = GetSplineNodeClosestToMouse(node.GetNextNode(i), mouseRay, out nextNodeResult, directionBased, radius);
+            if(dist < radius)
+            {
+                float newDist2cam = Vector3.Distance(mouseRay.origin, node.GetNextNode(i).point);
+                if(newDist2cam < distToCam)
+                {
+                    result = nextNodeResult;
+                    distToNode = dist;
+                }
+            }
+            else if(dist < distToNode)
+            {
+                distToNode = dist;
+                result = nextNodeResult;
+            }
+        }
+        return distToNode;
+    }
+
+    [Obsolete("This one is not precise enough so it was replaced with TryGetClosestPointToMousePos")]
     public bool TryGetClosestPoint(Vector3 point, out SplineNode closestPoint)
     {
         GetSmallestDistance(point, out closestPoint);
@@ -158,16 +259,27 @@ public class CatmullTree : MonoBehaviour
     {
         if (node == null)
             node = tree;
-        
-        float dist = GetDistToPoint(pos, node, prev);
+
+        // float dist = GetDistToPoint(pos, node, prev);
         result = node;
+
+        float dist = 0.0f;
+
+        if(node.GetNumberOfConnections() == 0)
+        {
+            return float.PositiveInfinity;
+        }
+
+        dist = GetDistToPoint(pos, node, node.GetNextNode(), prev);
 
         for(int i = 0; i < node.GetNumberOfConnections(); i++)
         {
-            if (Vector3.Dot(pos - node.point, node.GetNextNode(0).point - node.point) < 0)
-                return float.PositiveInfinity;
-            SplineNode tmpRes;
-            float tmpDist = GetSmallestDistance(pos, out tmpRes, node.GetNextNode(i), node);
+            SplineNode tmpRes = null;
+            float tmpDist;
+            // if (Vector3.Dot(pos - node.point, node.GetNextNode(0).point - node.point) < 0)
+            //     tmpDist = float.PositiveInfinity;
+            // else
+            tmpDist = GetSmallestDistance(pos, out tmpRes, node.GetNextNode(i), node);
 
             if(tmpDist < dist)
             {
@@ -179,8 +291,40 @@ public class CatmullTree : MonoBehaviour
         return dist;
     }
         
-    private float GetDistToPoint(Vector3 pos, SplineNode node, SplineNode prev = null)
+    private float GetDistToPoint(Vector3 pos, SplineNode node, SplineNode next, SplineNode prev = null)
     {
+        Vector3 p0, p1, p2, p3 = Vector3.zero;
+        p1 = node.point;
+        p2 = next.point;
+        if(prev == null)
+        {
+            p0 = p1 + p1 - p2;
+        }
+        else
+        {
+            p0 = prev.point;
+        }
+        if(next.GetNumberOfConnections() > 0)
+        {
+            p3 = next.GetNextNode().point;
+        }
+        else
+        {
+            p3 = p2 + p2 - p1;
+        }
+
+        float at = Vector3.Distance(p1, pos);
+        float bt = Vector3.Distance(p2, pos);
+        float mt = at + bt;
+        float t = at / mt;
+
+        t = Mathf.Clamp01(t);
+
+        Vector3 posOnLine = CatmullRom.GetPoint(p0, p1, p2, p3, t, 0.5f);
+        float dist = Vector3.Distance(pos, posOnLine);
+
+        return dist;
+
         Vector3 dir = Vector3.zero;
         //if (node.GetNumberOfConnections() <= 0)
         //{

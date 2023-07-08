@@ -47,12 +47,13 @@ public class TreeMesh : MonoBehaviour
         triangleBuffer.Dispose();
     }
 
-    private void Awake()
+    private void Start()
     {
         mesh = new Mesh();
         GetComponent<MeshFilter>().mesh = mesh;
         resolution = Mathf.Sqrt(verteciemult);
         //camTransform = Camera.main.transform;
+        GenerateMeshSplineByShader();
     }
 
     public void ChangeCam(Camera cam)
@@ -66,16 +67,10 @@ public class TreeMesh : MonoBehaviour
     private void Update()
     {
         bUpdateMeshGen = Input.GetMouseButton(0);
-        if (Input.GetKeyDown(KeyCode.G))
-            GenerateMeshSplineByShader();
 
         if (Input.GetKey(KeyCode.C))
         {
-            List<Vector3> posList = tree.tree.ConvertBranch2VectorList(true);
-            for (int i = 0; i < posList.Count; i++)
-            {
-                Debug.Log(i + "th position: " + posList[i]);
-            }
+            tree.tree.DrawTree();
 
         }
         if (Input.GetKey(KeyCode.X))
@@ -85,34 +80,14 @@ public class TreeMesh : MonoBehaviour
             {
                 Vector3 pos = posList[i];
                 Vector3 nextPos = posList[i + 1];
-                if (nextPos == GlobalVar.NULLVEC)
+                if (nextPos == GlobalVar.NULLVEC || pos == GlobalVar.NULLVEC)
                 {
+                    Debug.Log("nullvec" + " : " + i);   
                     continue;
                 }
                 Debug.DrawRay(pos, nextPos - pos, Color.red);
             }
-            for (int i = 0; i < posList.Count; i++)
-            {
-                Debug.Log("pos " + i + ": " + posList[i]);
-            }
-
-            //int width = (int)(ra * verteciemult);
-            //float widthMult = 1f / (float)width;
-            //float heightMult = 1f / (float)height;
-            //for (int i = 0; i < width * height; i++)
-            //{
-            //    // Debug.Log("t: " + i + " | interpolation: " + Mathf.Floor(i * widthMult) * heightMult);
-            //}
         }
-    }
-
-    private void Start()
-    {
-        mesh = new Mesh();
-        GetComponent<MeshFilter>().mesh = mesh;
-        var watch = System.Diagnostics.Stopwatch.StartNew();
-        //GenerateMeshSpline();
-        GenerateMeshSplineByShader();
     }
     private void FixedUpdate()
     {
@@ -128,6 +103,11 @@ public class TreeMesh : MonoBehaviour
 
     public void GenerateMeshSplineByShader()
     {
+        if(mesh != null)
+        {
+            mesh.Clear();
+        }
+
         float widthMult = 1f / (float)width;
         float heightMult = 1f / (float)height;
         float vertecieDivider = 1f / (float)(width * height);
@@ -142,23 +122,21 @@ public class TreeMesh : MonoBehaviour
                 numOfEnds++;
         }
 
-        //posCount -= numOfEnds;
-        int numOfVerts = height * width * posCount;
+        int numOfVerts = height * width * (posCount - numOfEnds);
         int numOfTris = (numOfVerts - width) * 6 + numOfEnds * width * 3;
         numOfVerts += numOfEnds;
-
 
         vertexBuffer = new ComputeBuffer(numOfVerts, sizeof(float) * 3);
         triangleBuffer = new ComputeBuffer(numOfTris, sizeof(float));
         positionBuffer = new ComputeBuffer(posList.Count, sizeof(float) * 3);
         vigorBuffer = new ComputeBuffer(posList.Count, sizeof(float));
 
-        DebugBuffer = new ComputeBuffer(posList.Count, sizeof(float));
+        DebugBuffer = new ComputeBuffer(posList.Count * height, sizeof(float));
 
         Vector3[] vertBufferList = new Vector3[numOfVerts];
         int[] triBufferList = new int[numOfTris];
 
-        float[] debugBufferList = new float[posList.Count];
+        float[] debugBufferList = new float[posList.Count * height];
 
 
         vertexBuffer.SetData(vertBufferList);
@@ -176,7 +154,6 @@ public class TreeMesh : MonoBehaviour
         //vertexShader.SetFloat("vertecieDivider", vertecieDivider);
         //vertexShader.SetFloat("widthMult", widthMult);
         vertexShader.SetFloat("widthDivider", widthMult);
-        //vertexShader.SetFloat("heightMult", heightMult);
         vertexShader.SetFloat("heightDivider", heightMult);
         //vertexShader.SetInt("numOfPositions", posList.Count - numOfEnds);
         vertexShader.SetInt("numOfPositionsMax", posList.Count);
@@ -186,10 +163,10 @@ public class TreeMesh : MonoBehaviour
         vertexShader.SetInt("numEnds", numOfEnds);
 
         //vertexShader.Dispatch(0, numOfVerts / 32 + 32, 1, 1);
-        vertexShader.Dispatch(0, ((posCount * height)) / 32 + 32, 1, 1);
+        vertexShader.Dispatch(0, (((posList.Count) * height)) / 32 + 32, 1, 1);
         Vector3[] resultingVerts = new Vector3[numOfVerts];
         Vector3[] resultingPos = new Vector3[posList.Count];
-        float[] resultingDebug = new float[posList.Count];
+        float[] resultingDebug = new float[posList.Count * height];
         int[] resultingTris = new int[numOfTris];
         vertexBuffer.GetData(resultingVerts);
         triangleBuffer.GetData(resultingTris);
@@ -198,6 +175,11 @@ public class TreeMesh : MonoBehaviour
         mesh.vertices = resultingVerts;
         mesh.triangles = resultingTris;
 
+
+        for(int i = 0; i < resultingDebug.Length; i++)
+        {
+            Debug.Log(resultingDebug[i] + "  |  " + i + "  |  " +  posCount * height);
+        }
         vertexBuffer.Dispose();
         triangleBuffer.Dispose();
         positionBuffer.Dispose();

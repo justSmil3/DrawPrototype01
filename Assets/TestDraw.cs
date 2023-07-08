@@ -6,6 +6,7 @@ public class TestDraw : MonoBehaviour
 {
     public ComputeShader shader;
     public TreeMesh tmpMeshScript;
+    public GameObject optionsMenu;
 
     // TMP Cam stuff
     private List<RenderTexture> allTextures = new List<RenderTexture>();
@@ -24,10 +25,11 @@ public class TestDraw : MonoBehaviour
     private Mesh _mesh;
     private float screenScaleX;
     private float screenScaleY;
-    private int radius = 5;
+    private float endExtendedScle = 0.4f;
+    private float radius = .3f;
     private int extendetRadius = 5;
     private List<Vector3> points = new List<Vector3>();
-    private ComputeBuffer point;
+    //private ComputeBuffer point;
     private Camera cam;
 
     private Vector3 prevPointDir = Vector3.zero;
@@ -35,16 +37,16 @@ public class TestDraw : MonoBehaviour
     private float prevDirDot = 1;
     private Vector3 prevPointpos = Vector3.zero;
     private Vector3 lasteddidPointPos = Vector3.zero;
+    private SplineNode connectionPoint = null;
 
     private float mindistBetweenPoints = 0.1f;
     public float maxDistBetweenPoints = 1.0f;
 
     private bool bSkipFirst = true;
-    private Ray initialMouseRay;
 
     private void OnDisable()
     {
-        point.Release();
+        //point.Release();
     }
     private void Awake()
     {
@@ -52,7 +54,7 @@ public class TestDraw : MonoBehaviour
     }
     public void Start()
     {
-        point = new ComputeBuffer(1, sizeof(float) * 3);
+        //point = new ComputeBuffer(1, sizeof(float) * 3);
         int screenWidth = (int)(Screen.width * cam.rect.width);
         int screenHeight = (int)(Screen.height * cam.rect.height);
         textureBuffer = new RenderTexture(screenWidth, screenHeight, 4);
@@ -95,41 +97,23 @@ public class TestDraw : MonoBehaviour
 
     private void Update()
     {
-        //float dist2Cam = Vector3.Distance(cam.transform.position, transform.position);
-        //float planeHeight = 2.0f * Mathf.Tan(0.5f * cam.fieldOfView * Mathf.Deg2Rad) * dist2Cam;
-        //planeHeight /= 10;
-        //float planeWidth = planeHeight * cam.aspect;
-        //transform.localScale = new Vector3(planeWidth, transform.localScale.y, planeHeight);
-        if (Input.GetMouseButtonDown(0))
+        // Temporary
+        if (optionsMenu.activeSelf)
         {
-            initialMouseRay = cam.ScreenPointToRay(Input.mousePosition);
+            return;
         }
         if (Input.GetMouseButton(0))
         {
-            int screenWidth = (int)(Screen.width * cam.rect.width);
-            int screenHeight = (int)(Screen.height * cam.rect.height);
-
-            shader.SetTexture(drawKernel, "Result", textureBuffer);
-            shader.SetBuffer(drawKernel, "_point", point);
-            int mousePosX = (int)((Screen.width - (int)Input.mousePosition.x) % screenWidth);
-            int mousePosY = (int)((Screen.height - (int)Input.mousePosition.y) % screenHeight);
-            // Vector3 mp = cam.WorldToScreenPoint(Vector3.up);
-            // shader.SetInt("mouseX", (int)mp.x);
-            // shader.SetInt("mouseY", (int)mp.y);
-            shader.SetInt("mouseX", mousePosX);
-            shader.SetInt("mouseY", mousePosY);
-            shader.SetInt("radius", radius);
-            shader.SetInt("checkDist", extendetRadius);
-            shader.Dispatch(drawKernel, screenWidth / 8, screenHeight / 8, 1);
             TryAddPoint();
-        }
-        if (Input.GetKey(KeyCode.LeftControl))
-        {
-            resetTexture();
         }
         if (Input.GetMouseButtonUp(0))
         {
+            int pl = points.Count;
+            tmpCatmullTree.MoveLastPoint(points[pl - 1] + (points[pl - 1] - points[pl - 3]) * endExtendedScle);
+            tmpCatmullTree.UndoNodeAdd();
+            tmpMeshScript.GenerateMeshSplineByShader();
             prevPointpos = prevPointDir = prevAddedPoint = Vector3.zero;
+            connectionPoint = null;
             // tmpCatmullTree.ResetLastPoint();
         }
     }
@@ -143,6 +127,7 @@ public class TestDraw : MonoBehaviour
         return false;
     }
 
+    [Obsolete("while doing it over a shader is possible there abre better variants than using the depth map cause it is to impercice")]
     public void resetTexture()
     {
         for (int i = 0; i < allTextures.Count; i++)
@@ -179,6 +164,7 @@ public class TestDraw : MonoBehaviour
         bool add = Input.GetMouseButtonDown(0);
         if (!ExtractPoint(out pos, out conPos, out conNode))
             return;
+        Debug.DrawRay(Camera.main.transform.position, conNode.point - Camera.main.transform.position, Color.green, 50);
         if (Vector3.Distance(pos, prevAddedPoint) < mindistBetweenPoints)
             return;
         SplineNode newConNode = null;
@@ -191,8 +177,8 @@ public class TestDraw : MonoBehaviour
             lasteddidPointPos = pos;
 
             points.Add(pos);
-            newConNode = tmpCatmullTree.AddPoint(conPos, conNode);
-            Debug.Log(conPos + " : " + conNode);
+            SplineNode baseNode = tmpCatmullTree.AddPoint(conPos, conNode);
+            newConNode = tmpCatmullTree.AddPoint(conPos, baseNode);
             //tmpCatmullTree.testPoints.Add(pos);
         }
         else
@@ -230,19 +216,20 @@ public class TestDraw : MonoBehaviour
             prevDirDot = 1;
 
             // TODO currently not working
+            tmpCatmullTree.MoveLastPoint(pos);
             points[points.Count - 1] = pos;
-            if(newConNode == null)
-                tmpCatmullTree.MoveLastPoint(pos);
+            if (newConNode == null)
+            {
+                connectionPoint = tmpCatmullTree.AddPoint(pos, tmpCatmullTree.GetLastPoint());
+            }
+            else
+            {
+                connectionPoint = tmpCatmullTree.AddPoint(pos, newConNode);
+            }
 
             //tmpCatmullTree.testPoints[tmpCatmullTree.testPoints.Count - 1] = pos;
             //points.Add(conPos);
             points.Add(pos);
-
-            if(newConNode == null)
-                tmpCatmullTree.AddPoint(pos, tmpCatmullTree.GetLastPoint());
-            else
-                tmpCatmullTree.AddPoint(pos, newConNode);
-
             prevAddedPoint = pos;
             //tmpCatmullTree.testPoints.Add(pos);
             prevPointDir = (pos - prevPointpos).normalized;
@@ -265,16 +252,19 @@ public class TestDraw : MonoBehaviour
         connectionJoint = Vector3.zero;
         connectionNode = null;
 
-        Vector3[] pArray = new Vector3[1];
-        point.GetData(pArray);
-        Vector3 p = pArray[0];
-        if (p.z == 0) return false;
+        //Vector3[] pArray = new Vector3[1];
+        //point.GetData(pArray);
+        //Vector3 p = pArray[0];
+        //if (p.z == 0) return false;
         Ray mouseRay = cam.ScreenPointToRay(Input.mousePosition);
-        Vector3 mousePoint = mouseRay.origin + mouseRay.direction.normalized * p.z;
+        //Vector3 mousePoint = mouseRay.origin + mouseRay.direction.normalized * p.z;
         SplineNode closestPoint;
-        if (!tmpCatmullTree.TryGetClosestPoint(mousePoint, out closestPoint))
+        if (connectionPoint != null)
+        {
+            closestPoint = connectionPoint;
+        }
+        else if (!tmpCatmullTree.TryGetClosestPointToMousePos(Input.mousePosition, out closestPoint, true, radius, 1))
             return false;
-        //Debug.DrawRay(Vector3.zero, closestPoint.point, Color.green, 10);
         connectionNode = closestPoint;
         
 
@@ -318,8 +308,6 @@ public class TestDraw : MonoBehaviour
         dist1 = Vector3.Distance(closestPoint.point, _point);
         dist2 = Vector3.Distance(p2.point, _point);
         float t = dist1 / (dist1 + dist2);
-        Debug.DrawRay(cam.transform.position, p2.point  - cam.transform.position, Color.green, 10);
-        Debug.DrawRay(cam.transform.position, p3  - cam.transform.position, Color.green, 10);
         connectionJoint = CatmullRom.GetPoint(connectionNode.point, p2.point, p3, t, 0.5f);
         return true;
         

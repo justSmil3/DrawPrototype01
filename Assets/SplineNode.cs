@@ -189,6 +189,28 @@ public class SplineNode
         return next[startIdx].GetLastSplineNode();
     }
 
+    public void DeleteSplineNode(SplineNode node)
+    {
+        bool found = false;
+        for(int i = 0; i < GetNumberOfConnections(); i++)
+        {
+            if(next[i] == node)
+            {
+                next.Remove(node);
+                SetNext(node.next.ToArray());
+                found = true;
+            }
+        }
+        if (found)
+        {
+            return;
+        }
+        for(int i = 0; i < GetNumberOfConnections(); i++)
+        {
+            next[i].DeleteSplineNode(node);
+        }
+    }
+
     public void DeleteSplineTree()
     {
         for (int i = 0; i < next.Count; i++)

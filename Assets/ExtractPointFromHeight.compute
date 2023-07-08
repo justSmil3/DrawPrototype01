@@ -1,0 +1,44 @@
+
+#include "UnityCG.cginc"
+
+float GetColor(RWTexture2D<float4> tex, int constraintX, int constraintY, int buffer)
+{
+    float color = 0;
+    for (int i = 0; i < pow(buffer, 2); i++)
+    {
+        int x = i % buffer - buffer / 2 + constraintX;
+        int y = i / buffer - buffer / 2 + constraintY;
+        
+        if (tex[float2(x,y)].x > color)
+        {
+            color = tex[float2(x, y)];
+        }
+    }
+    return color;
+}
+
+float3 ExtractPoint(RWTexture2D<float4> tex, int x, int y, int constraintX, int constraintY, int buffer)
+{
+    float3 result = 0;
+    
+    int diffX = constraintX - x;
+    int diffY = constraintY - y;
+    diffX = abs(diffX);
+    diffY = abs(diffX);
+    
+    if (diffX <= buffer && diffY <= buffer)
+    {
+        float color = GetColor(tex, constraintX, constraintY, buffer);
+        if (color > 0)
+        {
+            result = float3(x, y, DECODE_EYEDEPTH(color));
+        }
+        else
+        {
+            result = 0;
+        }
+    }
+    
+    return result;
+
+}

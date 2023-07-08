@@ -18,6 +18,8 @@ public class CameraBase : MonoBehaviour
     private static string kMouseX = "Mouse X";
     private static string kMouseY = "Mouse Y";
 
+    protected bool overrideCamControlls = false;
+
     protected virtual void Awake()
     {
         initialRotation = transform.rotation;
@@ -29,7 +31,7 @@ public class CameraBase : MonoBehaviour
 
         float inputVertical = Input.GetAxis(kVertical);
         float inputHorizontal = Input.GetAxis(kHorizontal);
-        float inputUp = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl) ? 1 : 0;
+        float inputUp = 0;// Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl) ? 1 : 0;
         float inputdown = Input.GetKey(KeyCode.Space) ? 1 : 0;
 
 

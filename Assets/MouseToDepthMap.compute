@@ -1,0 +1,30 @@
+// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel CSMain
+#include "ExtractPointFromHeight.compute"
+
+// Create a RenderTexture with enableRandomWrite flag and set it
+// with cs.SetTexture
+Texture2D<float4> Result;
+RWStructuredBuffer<float3> _point;
+int mouseX;
+int mouseY;
+int radius;
+
+bool isZeroFloat3(float3 vec)
+{
+    return vec.x == 0 && vec.y == 0 && vec.z == 0;
+}
+
+[numthreads(8,8,1)]
+void CSMain (uint3 id : SV_DispatchThreadID)
+{
+    float3 color = ExtractPoint(Result, id.x, id.y, mouseX, mouseY, radius);
+    if (!isZeroFloat3(color))
+    {
+        _point[0] = color;
+    }
+}
+
+// I got two idea for that case: 
+// The first would be to just use the idea of the testDraw -> for the start I go with this
+// the second would be to calculate a sdf and get the closes value that way
